@@ -1,0 +1,21 @@
+# Example AdaptivePy configuration (feature-only run)
+
+features_dir: examples/data/features
+output_dir: examples/results
+
+clustering:
+  method: kmeans
+  n_clusters: 5
+  params: {}
+
+policies:
+  - least_counts
+  - random
+
+n_seeds: 3
+
+seed_selection:
+  method: nearest_center
+
+random_seed: 42
+write_pdbs: false

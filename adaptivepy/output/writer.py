@@ -1,0 +1,229 @@
+"""Write run outputs: CSV metadata, numpy arrays, and serialized models."""
+
+from __future__ import annotations
+
+import csv
+import logging
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional
+
+import joblib
+import numpy as np
+import yaml
+
+from adaptivepy.config.schema import RunConfig, config_to_dict
+from adaptivepy.models import SeedResult
+from adaptivepy.stats.cluster_stats import ClusterStats, cluster_stats_to_rows
+from adaptivepy.utils.io_utils import copy_file, ensure_dir
+
+logger = logging.getLogger(__name__)
+
+
+def write_run_config(config: RunConfig, output_dir: Path, source_path: Path) -> Path:
+    """Save a copy of the run configuration to the output directory.
+
+    Parameters
+    ----------
+    config : RunConfig
+        Parsed configuration object.
+    output_dir : Path
+        Run output directory.
+    source_path : Path
+        Original YAML file path (copied verbatim when available).
+
+    Returns
+    -------
+    Path
+        Path to the saved configuration file.
+    """
+    dst = ensure_dir(output_dir) / "run_config.yaml"
+    if source_path.is_file():
+        copy_file(source_path, dst)
+    else:
+        with dst.open("w", encoding="utf-8") as handle:
+            yaml.safe_dump(config_to_dict(config), handle, sort_keys=False)
+    return dst
+
+
+def write_assignments(assignments: np.ndarray, output_dir: Path) -> Path:
+    """Save per-frame cluster assignments as a numpy array.
+
+    Parameters
+    ----------
+    assignments : np.ndarray
+        Cluster label per frame.
+    output_dir : Path
+        Run output directory.
+
+    Returns
+    -------
+    Path
+        Path to ``assignments.npy``.
+    """
+    path = ensure_dir(output_dir) / "assignments.npy"
+    np.save(path, assignments)
+    return path
+
+
+def write_cluster_model(model: Any, output_dir: Path) -> Path:
+    """Serialize the fitted clustering model with joblib.
+
+    Parameters
+    ----------
+    model : object
+        Fitted clustering model.
+    output_dir : Path
+        Run output directory.
+
+    Returns
+    -------
+    Path
+        Path to ``cluster_model.pkl``.
+    """
+    path = ensure_dir(output_dir) / "cluster_model.pkl"
+    joblib.dump(model, path)
+    return path
+
+
+def write_cluster_statistics(
+    cluster_stats: ClusterStats,
+    output_dir: Path,
+) -> Path:
+    """Write cluster population statistics to ``metadata.csv``.
+
+    Parameters
+    ----------
+    cluster_stats : dict
+        Per-cluster statistics.
+    output_dir : Path
+        Run output directory.
+
+    Returns
+    -------
+    Path
+        Path to ``metadata.csv``.
+    """
+    path = ensure_dir(output_dir) / "metadata.csv"
+    rows = cluster_stats_to_rows(cluster_stats)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["cluster_id", "population"])
+        writer.writeheader()
+        writer.writerows(rows)
+    return path
+
+
+def write_seeds_csv(seeds: Iterable[SeedResult], output_dir: Path) -> Path:
+    """Write selected seeds to ``seeds.csv``.
+
+    Parameters
+    ----------
+    seeds : iterable of SeedResult
+        Seed records for one policy.
+    output_dir : Path
+        Policy-specific output directory.
+
+    Returns
+    -------
+    Path
+        Path to ``seeds.csv``.
+    """
+    path = ensure_dir(output_dir) / "seeds.csv"
+    fieldnames = [
+        "seed_id",
+        "policy",
+        "traj_id",
+        "frame_id",
+        "cluster_id",
+        "global_index",
+    ]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for seed in seeds:
+            writer.writerow(
+                {
+                    "seed_id": seed.seed_id,
+                    "policy": seed.policy,
+                    "traj_id": seed.traj_id,
+                    "frame_id": seed.frame_id,
+                    "cluster_id": seed.cluster_id,
+                    "global_index": seed.global_index,
+                }
+            )
+    return path
+
+
+def write_combined_metadata(
+    policy_seeds: Dict[str, List[SeedResult]],
+    output_dir: Path,
+) -> Path:
+    """Write a combined seed table across all policies.
+
+    Parameters
+    ----------
+    policy_seeds : dict
+        Mapping from policy name to seed lists.
+    output_dir : Path
+        Top-level results directory.
+
+    Returns
+    -------
+    Path
+        Path to ``combined_metadata.csv``.
+    """
+    path = ensure_dir(output_dir) / "combined_metadata.csv"
+    fieldnames = [
+        "seed_id",
+        "policy",
+        "traj_id",
+        "frame_id",
+        "cluster_id",
+        "global_index",
+    ]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for _policy, seeds in policy_seeds.items():
+            for seed in seeds:
+                writer.writerow(
+                    {
+                        "seed_id": seed.seed_id,
+                        "policy": seed.policy,
+                        "traj_id": seed.traj_id,
+                        "frame_id": seed.frame_id,
+                        "cluster_id": seed.cluster_id,
+                        "global_index": seed.global_index,
+                    }
+                )
+    logger.info("Wrote combined metadata to %s", path)
+    return path
+
+
+def write_policy_outputs(
+    policy_name: str,
+    seeds: List[SeedResult],
+    cluster_stats: ClusterStats,
+    results_dir: Path,
+) -> Path:
+    """Write all outputs for a single policy into its subdirectory.
+
+    Parameters
+    ----------
+    policy_name : str
+        Policy identifier used as subdirectory name.
+    seeds : list of SeedResult
+        Seeds selected by the policy.
+    cluster_stats : dict
+        Global cluster statistics (same for all policies).
+    results_dir : Path
+        Top-level results directory.
+
+    Returns
+    -------
+    Path
+        Policy output directory path.
+    """
+    policy_dir = ensure_dir(results_dir / policy_name)
+    write_seeds_csv(seeds, policy_dir)
+    write_cluster_statistics(cluster_stats, policy_dir)
+    return policy_dir
