@@ -98,3 +98,6 @@ examples/data/
 # Logs
 *.log
 logs.txt
+
+# MkDocs build output
+site/

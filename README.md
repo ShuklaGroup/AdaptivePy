@@ -2,6 +2,8 @@
 
 Adaptive sampling on molecular dynamics trajectories using clustering-based state space partitioning and policy-driven seed selection.
 
+**Documentation:** [https://hnadeem2.github.io/AdaptivePy/](https://hnadeem2.github.io/AdaptivePy/)
+
 ## Installation
 
 ```bash
