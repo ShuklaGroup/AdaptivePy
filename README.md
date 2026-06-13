@@ -5,7 +5,7 @@ Adaptive sampling on molecular dynamics trajectories using clustering-based stat
 ## Installation
 
 ```bash
-pip install -e .
+pip install adaptivepy-sampling
 ```
 
 ## Quick start
