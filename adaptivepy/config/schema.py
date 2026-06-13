@@ -86,6 +86,137 @@ class RunConfig:
     seed_selection: SeedSelectionConfig = field(default_factory=SeedSelectionConfig)
     random_seed: int = DEFAULT_RANDOM_SEED
     write_pdbs: bool = True
+    policy_params: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+
+
+def _parse_policy_params(raw: Any) -> Dict[str, Dict[str, Any]]:
+    """Parse optional per-policy parameter blocks from YAML."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError("'policy_params' must be a mapping of policy names to settings.")
+    return {str(name): dict(params or {}) for name, params in raw.items()}
+
+
+def validate_fast_policy_params(
+    params: Dict[str, Any],
+    n_features: int,
+) -> Dict[str, Any]:
+    """Validate and normalize FAST policy parameters.
+
+    Parameters
+    ----------
+    params : dict
+        Raw FAST policy settings from configuration.
+    n_features : int
+        Number of feature dimensions in the loaded dataset.
+
+    Returns
+    -------
+    dict
+        Normalized keyword arguments for :class:`FastPolicy`.
+
+    Raises
+    ------
+    ValueError
+        If required FAST settings are missing or invalid.
+    """
+    if "feature_indices" not in params:
+        raise ValueError(
+            "FAST policy requires 'feature_indices' in policy_params.fast."
+        )
+
+    feature_indices = params["feature_indices"]
+    if isinstance(feature_indices, int):
+        feature_indices = [feature_indices]
+    if not isinstance(feature_indices, (list, tuple)) or not feature_indices:
+        raise ValueError("FAST 'feature_indices' must be a non-empty list of integers.")
+
+    normalized_indices: List[int] = []
+    for index in feature_indices:
+        if not isinstance(index, int):
+            raise ValueError("FAST 'feature_indices' must contain integers only.")
+        if index < 0 or index >= n_features:
+            raise ValueError(
+                f"FAST feature index {index} is out of range for "
+                f"{n_features} feature dimensions."
+            )
+        normalized_indices.append(index)
+
+    directions = params.get("directions")
+    if directions is not None:
+        if isinstance(directions, str):
+            directions = [directions]
+        if not isinstance(directions, (list, tuple)):
+            raise ValueError("FAST 'directions' must be a list of strings.")
+        if len(directions) != len(normalized_indices):
+            raise ValueError("FAST 'directions' must match 'feature_indices' length.")
+        for direction in directions:
+            if direction not in {"maximize", "minimize"}:
+                raise ValueError(
+                    f"Invalid FAST direction '{direction}'. "
+                    "Use 'maximize' or 'minimize'."
+                )
+
+    weights = params.get("weights")
+    if weights is not None:
+        if not isinstance(weights, (list, tuple)):
+            raise ValueError("FAST 'weights' must be a list of numbers.")
+        if len(weights) != len(normalized_indices):
+            raise ValueError("FAST 'weights' must match 'feature_indices' length.")
+        weights = [float(w) for w in weights]
+        if any(w < 0 for w in weights):
+            raise ValueError("FAST 'weights' must be non-negative.")
+        if sum(weights) <= 0:
+            raise ValueError("FAST 'weights' must sum to a positive value.")
+
+    alpha = float(params.get("alpha", 1.0))
+    if alpha < 0:
+        raise ValueError("FAST 'alpha' must be non-negative.")
+
+    kwargs: Dict[str, Any] = {
+        "feature_indices": normalized_indices,
+        "alpha": alpha,
+    }
+    if directions is not None:
+        kwargs["directions"] = list(directions)
+    if weights is not None:
+        kwargs["weights"] = weights
+    return kwargs
+
+
+def build_policy_kwargs(
+    policy_name: str,
+    config: RunConfig,
+    n_features: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Build constructor keyword arguments for a configured policy.
+
+    Parameters
+    ----------
+    policy_name : str
+        Registered policy name.
+    config : RunConfig
+        Parsed run configuration.
+    n_features : int or None
+        Feature dimensionality for policies that require it.
+
+    Returns
+    -------
+    dict
+        Keyword arguments forwarded to :func:`get_policy`.
+    """
+    kwargs: Dict[str, Any] = {}
+    params = config.policy_params.get(policy_name, {})
+
+    if policy_name == "random":
+        kwargs["random_state"] = config.random_seed
+    elif policy_name == "fast":
+        if n_features is None:
+            raise ValueError("FAST policy validation requires feature dimensionality.")
+        kwargs.update(validate_fast_policy_params(params, n_features))
+
+    return kwargs
 
 
 def load_config(path: str | Path) -> RunConfig:
@@ -148,6 +279,8 @@ def load_config(path: str | Path) -> RunConfig:
     if isinstance(policies, str):
         policies = [policies]
 
+    policy_params = _parse_policy_params(raw.get("policy_params"))
+
     return RunConfig(
         features_dir=features_dir,
         output_dir=output_dir,
@@ -159,6 +292,7 @@ def load_config(path: str | Path) -> RunConfig:
         seed_selection=seed_selection,
         random_seed=int(raw.get("random_seed", DEFAULT_RANDOM_SEED)),
         write_pdbs=bool(raw.get("write_pdbs", True)),
+        policy_params=policy_params,
     )
 
 
@@ -193,4 +327,6 @@ def config_to_dict(config: RunConfig) -> Dict[str, Any]:
         result["trajectories_dir"] = str(config.trajectories_dir)
     if config.topology is not None:
         result["topology"] = str(config.topology)
+    if config.policy_params:
+        result["policy_params"] = config.policy_params
     return result

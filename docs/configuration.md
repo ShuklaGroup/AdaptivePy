@@ -50,10 +50,39 @@ write_pdbs: true
 | `clustering.n_clusters` | no | `10` | Number of clusters |
 | `clustering.params` | no | `{}` | Extra arguments passed to the clusterer |
 | `policies` | no | `[least_counts]` | List of policy names to evaluate |
+| `policy_params` | no | `{}` | Per-policy settings (see below) |
 | `n_seeds` | no | `10` | Seeds selected per policy |
 | `seed_selection.method` | no | `nearest_center` | `nearest_center` or `random_frame` |
 | `random_seed` | no | `42` | Global random seed |
 | `write_pdbs` | no | `true` | Write PDB files when trajectories are available |
+
+## Policy parameters
+
+Some policies accept extra settings under `policy_params`:
+
+```yaml
+policies:
+  - fast
+  - least_counts
+
+policy_params:
+  fast:
+    feature_indices: [0, 2]
+    directions: [maximize, minimize]
+    weights: [0.7, 0.3]
+    alpha: 1.0
+```
+
+### FAST (`fast`)
+
+| Key | Required | Default | Description |
+|-----|----------|---------|-------------|
+| `feature_indices` | yes | — | Feature column indices to optimize |
+| `directions` | no | all `maximize` | `maximize` or `minimize` per feature |
+| `weights` | no | equal | Non-negative weights per feature |
+| `alpha` | no | `1.0` | Exploration/exploitation balance |
+
+See [Policies](policies.md) for algorithm details.
 
 ## Clustering methods
 

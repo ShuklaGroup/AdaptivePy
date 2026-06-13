@@ -32,6 +32,15 @@ Each file must be a **2D array** with shape `(n_frames, n_features)`:
 
 All trajectories must use the same `n_features`.
 
+## Feature columns for FAST sampling
+
+When using the `fast` policy, `policy_params.fast.feature_indices` refer to
+**column indices** in each feature array. For example, in a file with shape
+`(100, 8)`, index `0` is the first feature dimension and index `2` is the third.
+
+You can maximize some features and minimize others in the same run by setting
+`directions` per index. See [Policies](policies.md) for configuration details.
+
 ## Trajectory identity
 
 Each file becomes one trajectory, identified by its filename stem:

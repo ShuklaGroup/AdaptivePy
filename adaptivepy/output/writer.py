@@ -199,6 +199,49 @@ def write_combined_metadata(
     return path
 
 
+def write_fast_scores(
+    scores: Dict[int, Dict[str, float]],
+    output_dir: Path,
+) -> Path:
+    """Write FAST reward components to ``scores.csv``.
+
+    Parameters
+    ----------
+    scores : dict
+        Mapping from cluster ID to score components.
+    output_dir : Path
+        Policy-specific output directory.
+
+    Returns
+    -------
+    Path
+        Path to ``scores.csv``.
+    """
+    path = ensure_dir(output_dir) / "scores.csv"
+    fieldnames = [
+        "cluster_id",
+        "directed_score",
+        "exploration_score",
+        "reward",
+        "population",
+    ]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for cluster_id in sorted(scores):
+            row = scores[cluster_id]
+            writer.writerow(
+                {
+                    "cluster_id": cluster_id,
+                    "directed_score": row["directed_score"],
+                    "exploration_score": row["exploration_score"],
+                    "reward": row["reward"],
+                    "population": int(row["population"]),
+                }
+            )
+    return path
+
+
 def write_policy_outputs(
     policy_name: str,
     seeds: List[SeedResult],

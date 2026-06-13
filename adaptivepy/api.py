@@ -9,7 +9,7 @@ from typing import Dict, List, Optional
 import numpy as np
 
 from adaptivepy.clustering import create_clusterer, fit_clusterer
-from adaptivepy.config.schema import RunConfig, load_config
+from adaptivepy.config.schema import RunConfig, build_policy_kwargs, load_config
 from adaptivepy.io.loader import (
     list_feature_files,
     list_trajectory_files,
@@ -28,6 +28,7 @@ from adaptivepy.output.writer import (
     write_cluster_model,
     write_cluster_statistics,
     write_combined_metadata,
+    write_fast_scores,
     write_policy_outputs,
     write_run_config,
 )
@@ -121,6 +122,7 @@ def run_adaptive_sampling(
 
     cluster_stats = compute_cluster_stats(dataset)
     centers = clusterer.cluster_centers_
+    n_features = dataset.feature_matrix.shape[1]
 
     logger.info(
         "Clustering complete: %d clusters, %d total frames",
@@ -139,9 +141,9 @@ def run_adaptive_sampling(
 
     for policy_name in config.policies:
         logger.info("Applying policy: %s", policy_name)
-        policy_kwargs = {}
-        if policy_name == "random":
-            policy_kwargs["random_state"] = config.random_seed
+        policy_kwargs = build_policy_kwargs(
+            policy_name, config, n_features=n_features
+        )
 
         policy = get_policy(policy_name, **policy_kwargs)
         selected_clusters = policy.select_clusters(
@@ -160,6 +162,9 @@ def run_adaptive_sampling(
         policy_dir = write_policy_outputs(
             policy_name, seeds, cluster_stats, output_dir
         )
+
+        if policy_name == "fast" and hasattr(policy, "last_scores"):
+            write_fast_scores(policy.last_scores, policy_dir)
 
         if (
             config.write_pdbs
@@ -209,6 +214,7 @@ def validate_config(config_path: str | Path) -> RunConfig:
 
     dataset = load_features(config.features_dir)
     validate_dataset(dataset, trajectory_files)
+    n_features = dataset.feature_matrix.shape[1]
 
     if config.trajectories_dir is not None and config.topology is not None:
         trajectory_map = build_trajectory_map(
@@ -223,6 +229,9 @@ def validate_config(config_path: str | Path) -> RunConfig:
         )
 
     for policy_name in config.policies:
-        get_policy(policy_name)
+        get_policy(
+            policy_name,
+            **build_policy_kwargs(policy_name, config, n_features=n_features),
+        )
 
     return config

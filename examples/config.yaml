@@ -11,6 +11,14 @@ clustering:
 policies:
   - least_counts
   - random
+  # - fast
+
+# Example FAST policy settings (uncomment with policies: [fast])
+# policy_params:
+#   fast:
+#     feature_indices: [0]
+#     directions: [maximize]
+#     alpha: 1.0
 
 n_seeds: 3
 

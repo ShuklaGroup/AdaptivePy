@@ -18,3 +18,10 @@
     options:
       members:
         - RandomPolicy
+
+::: adaptivepy.policies.fast
+    options:
+      members:
+        - FastPolicy
+        - compute_fast_rewards
+        - feature_scale
