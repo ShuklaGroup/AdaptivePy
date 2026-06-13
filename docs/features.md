@@ -41,6 +41,20 @@ When using the `fast` policy, `policy_params.fast.feature_indices` refer to
 You can maximize some features and minimize others in the same run by setting
 `directions` per index. See [Policies](policies.md) for configuration details.
 
+## Agent assignment for MA-REAP
+
+When using the `ma_reap` policy, `policy_params.ma_reap.agents` maps agent names
+to feature file stems. Every trajectory file in `features_dir` must appear in
+exactly one agent list. For example:
+
+```yaml
+policy_params:
+  ma_reap:
+    agents:
+      agent_0: [traj_0, traj_1]
+      agent_1: [traj_2, traj_3]
+```
+
 ## Trajectory identity
 
 Each file becomes one trajectory, identified by its filename stem:

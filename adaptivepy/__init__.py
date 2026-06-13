@@ -1,6 +1,6 @@
 """AdaptivePy: adaptive sampling for molecular dynamics trajectories."""
 
-__version__ = "0.1.2"
+__version__ = "0.2.0"
 
 from adaptivepy.api import run_adaptive_sampling
 

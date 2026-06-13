@@ -55,6 +55,53 @@ policy_params:
 
 FAST writes an additional `fast/scores.csv` with per-cluster reward components.
 
+### `ma_reap`
+
+Implements **MA-REAP** (Multiagent REAP) from Kleiman & Shukla (2022). Extends
+REAP with multiple coordinated agents that compartmentalize data and share
+information at the clustering step via stakes-weighted rewards.
+
+Pipeline:
+
+1. Select least-count cluster candidates (`n_candidates`).
+2. Compute per-agent stakes from frame ownership in each candidate cluster.
+3. Optimize each agent's CV weights (SLSQP with simplex and `delta` constraints).
+4. Score candidates per agent using weighted standardized L1 distance from the
+   agent's mean feature vector.
+5. Aggregate scores (`collaborative`, `noncollaborative`, or `competitive`).
+6. Select top `n_seeds` clusters.
+
+Configure via `policy_params`:
+
+```yaml
+policies:
+  - ma_reap
+
+policy_params:
+  ma_reap:
+    n_candidates: 6
+    agents:
+      agent_0: [traj_0, traj_1]
+      agent_1: [traj_2, traj_3]
+    initial_weights: [0.5, 0.5]
+    delta: 0.05
+    stakes_method: percentage
+    regime: collaborative
+```
+
+| Key | Required | Default | Description |
+|-----|----------|---------|-------------|
+| `agents` | yes | — | Map agent names to feature file stems |
+| `n_candidates` | no | `max(n_seeds, 3*n_seeds)` | Least-count candidates to score |
+| `initial_weights` | no | uniform | Shared `(n_features,)` or per-agent `(n_agents, n_features)` |
+| `delta` | no | `0.05` | Max per-feature weight change |
+| `stakes_method` | no | `percentage` | `percentage`, `equal`, `max`, or `logistic` |
+| `stakes_k` | if logistic | — | Logistic steepness parameter |
+| `regime` | no | `collaborative` | Reward aggregation mode |
+
+MA-REAP writes sidecar files: `scores.csv`, `agent_weights.csv`, `stakes.csv`,
+and `executors.csv`. See [Outputs](outputs.md).
+
 ## Multi-policy runs
 
 Configure multiple policies in YAML:

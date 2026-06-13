@@ -242,6 +242,73 @@ def write_fast_scores(
     return path
 
 
+def write_ma_reap_outputs(
+    scores: Dict[int, Dict[str, float]],
+    weights: Dict[str, List[float]],
+    stakes: Dict[int, Dict[str, float]],
+    executors: Dict[int, str],
+    agent_names: List[str],
+    seeds: List[SeedResult],
+    output_dir: Path,
+) -> None:
+    """Write MA-REAP sidecar CSV files under the policy output directory."""
+    policy_dir = ensure_dir(output_dir)
+
+    score_fields = ["cluster_id", "aggregate_score", "population"] + [
+        f"score_{name}" for name in agent_names
+    ]
+    scores_path = policy_dir / "scores.csv"
+    with scores_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=score_fields)
+        writer.writeheader()
+        for cluster_id in sorted(scores):
+            row = {"cluster_id": cluster_id}
+            row.update(scores[cluster_id])
+            writer.writerow(row)
+
+    weights_path = policy_dir / "agent_weights.csv"
+    with weights_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle, fieldnames=["agent", "feature_index", "weight"]
+        )
+        writer.writeheader()
+        for agent_name in agent_names:
+            for feat_idx, weight in enumerate(weights.get(agent_name, [])):
+                writer.writerow(
+                    {
+                        "agent": agent_name,
+                        "feature_index": feat_idx,
+                        "weight": weight,
+                    }
+                )
+
+    stake_fields = ["cluster_id"] + [f"stake_{name}" for name in agent_names]
+    stakes_path = policy_dir / "stakes.csv"
+    with stakes_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=stake_fields)
+        writer.writeheader()
+        for cluster_id in sorted(stakes):
+            row: Dict[str, Any] = {"cluster_id": cluster_id}
+            for agent_name in agent_names:
+                row[f"stake_{agent_name}"] = stakes[cluster_id].get(agent_name, 0.0)
+            writer.writerow(row)
+
+    executors_path = policy_dir / "executors.csv"
+    with executors_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle, fieldnames=["seed_id", "cluster_id", "executor_agent"]
+        )
+        writer.writeheader()
+        for seed in seeds:
+            writer.writerow(
+                {
+                    "seed_id": seed.seed_id,
+                    "cluster_id": seed.cluster_id,
+                    "executor_agent": executors.get(seed.cluster_id, ""),
+                }
+            )
+
+
 def write_policy_outputs(
     policy_name: str,
     seeds: List[SeedResult],

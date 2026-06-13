@@ -14,11 +14,18 @@ from adaptivepy.config.schema import (
     build_policy_kwargs,
     load_config,
     validate_fast_policy_params,
+    validate_ma_reap_policy_params,
 )
 from adaptivepy.io.loader import load_feature_array, load_features
 from adaptivepy.models import FrameRecord
 from adaptivepy.policies import list_policies
 from adaptivepy.policies.fast import FastPolicy, compute_fast_rewards, feature_scale
+from adaptivepy.policies.ma_reap import (
+    MaReapPolicy,
+    aggregate_agent_scores,
+    apply_stakes_method,
+    optimize_agent_weights,
+)
 from adaptivepy.stats.cluster_stats import ClusterStats
 
 
@@ -53,6 +60,21 @@ def _make_cluster_stats(
     return stats
 
 
+def _make_cluster_stats_with_trajs(
+    cluster_frames: dict[int, list[tuple[int, list[float]]]],
+) -> ClusterStats:
+    stats: ClusterStats = {}
+    global_index = 0
+    for cluster_id, frame_rows in cluster_frames.items():
+        frames = [
+            _make_frame(traj_id, frame_id, features, cluster_id, global_index + frame_id)
+            for frame_id, (traj_id, features) in enumerate(frame_rows)
+        ]
+        stats[cluster_id] = {"population": len(frames), "frames": frames}
+        global_index += len(frames)
+    return stats
+
+
 @pytest.fixture
 def synthetic_features(tmp_path: Path) -> Path:
     """Create synthetic feature arrays for two trajectories."""
@@ -65,11 +87,12 @@ def synthetic_features(tmp_path: Path) -> Path:
 
 
 def test_list_policies() -> None:
-    """Registered policies include least_counts, random, and fast."""
+    """Registered policies include least_counts, random, fast, and ma_reap."""
     policies = list_policies()
     assert "least_counts" in policies
     assert "random" in policies
     assert "fast" in policies
+    assert "ma_reap" in policies
 
 
 def test_feature_scale_maximize_and_minimize() -> None:
@@ -312,3 +335,171 @@ policies:
     )
     config = validate_config(config_path)
     assert config.features_dir == synthetic_features
+
+
+def test_apply_stakes_methods() -> None:
+    """Stakes methods normalize per candidate column."""
+    raw = np.array([[2.0, 0.0], [0.0, 4.0]])
+    percentage = apply_stakes_method(raw, "percentage")
+    assert percentage[0, 0] == pytest.approx(1.0)
+    assert percentage[1, 1] == pytest.approx(1.0)
+
+    equal = apply_stakes_method(np.array([[1.0, 1.0], [1.0, 0.0]]), "equal")
+    assert equal[0, 0] == pytest.approx(0.5)
+    assert equal[1, 0] == pytest.approx(0.5)
+    assert equal[0, 1] == pytest.approx(1.0)
+
+    maximum = apply_stakes_method(np.array([[1.0, 2.0], [3.0, 1.0]]), "max")
+    assert maximum[1, 0] == pytest.approx(1.0)
+    assert maximum[0, 1] == pytest.approx(1.0)
+
+
+def test_aggregate_agent_scores_regimes() -> None:
+    """Reward aggregation matches collaborative, noncollaborative, competitive."""
+    scores = np.array([[1.0, 2.0], [3.0, 1.0]])
+    np.testing.assert_array_equal(
+        aggregate_agent_scores(scores, "collaborative"), np.array([4.0, 3.0])
+    )
+    np.testing.assert_array_equal(
+        aggregate_agent_scores(scores, "noncollaborative"), np.array([3.0, 2.0])
+    )
+    np.testing.assert_array_equal(
+        aggregate_agent_scores(scores, "competitive"), np.array([2.0, 1.0])
+    )
+
+
+def test_optimize_agent_weights_constraints() -> None:
+    """Weight optimization stays on simplex and respects delta."""
+    means = np.array([0.0, 0.0])
+    stdev = np.array([1.0, 1.0])
+    stakes = np.array([1.0, 1.0])
+    candidates = np.array([[1.0, 0.0], [0.0, 1.0]])
+    prev = np.array([0.5, 0.5])
+    updated = optimize_agent_weights(prev, 0.05, means, stdev, stakes, candidates)
+    assert np.all(updated >= 0)
+    assert updated.sum() == pytest.approx(1.0)
+    assert np.all(np.abs(updated - prev) <= 0.05 + 1e-8)
+
+
+def test_ma_reap_policy_selects_clusters() -> None:
+    """MA-REAP returns deterministic cluster selections on synthetic stats."""
+    cluster_stats = _make_cluster_stats_with_trajs(
+        {
+            0: [(0, [0.0, 0.0]), (0, [0.1, 0.0])],
+            1: [(1, [5.0, 5.0])],
+            2: [(1, [10.0, 0.0]), (1, [10.1, 0.0])],
+        }
+    )
+    centers = np.array([[0.05, 0.0], [5.0, 5.0], [10.05, 0.0]])
+    policy = MaReapPolicy(
+        agent_assignments={"agent_a": ["traj_0"], "agent_b": ["traj_1"]},
+        traj_names=["traj_0", "traj_1"],
+        cluster_centers=centers,
+        n_candidates=3,
+        delta=0.2,
+        regime="collaborative",
+    )
+    selected = policy.select_clusters(cluster_stats, n_seeds=2)
+    assert len(selected) == 2
+    assert set(selected).issubset({0, 1, 2})
+    assert policy.last_weights
+    assert policy.last_stakes
+    assert policy.last_executors
+
+
+def test_validate_ma_reap_policy_params() -> None:
+    """MA-REAP config validation normalizes agent assignments."""
+    kwargs = validate_ma_reap_policy_params(
+        {
+            "agents": {"agent_a": ["traj_0"], "agent_b": ["traj_1"]},
+            "delta": 0.1,
+        },
+        traj_names=["traj_0", "traj_1"],
+        n_features=2,
+        n_seeds=2,
+        n_clusters=3,
+    )
+    assert kwargs["agent_assignments"]["agent_a"] == ["traj_0"]
+    assert kwargs["n_candidates"] == 3
+    assert kwargs["delta"] == pytest.approx(0.1)
+
+
+def test_validate_ma_reap_rejects_missing_agents() -> None:
+    """MA-REAP validation requires agent mapping."""
+    with pytest.raises(ValueError, match="agents"):
+        validate_ma_reap_policy_params({}, traj_names=["traj_0"], n_features=2)
+
+
+def test_validate_ma_reap_rejects_unassigned_trajectory() -> None:
+    """Every trajectory stem must belong to an agent."""
+    with pytest.raises(ValueError, match="Unassigned"):
+        validate_ma_reap_policy_params(
+            {"agents": {"agent_a": ["traj_0"], "agent_b": ["traj_1"]}},
+            traj_names=["traj_0", "traj_1", "traj_2"],
+            n_features=2,
+        )
+
+
+def test_build_policy_kwargs_ma_reap(tmp_path: Path, synthetic_features: Path) -> None:
+    """build_policy_kwargs validates MA-REAP settings."""
+    config = RunConfig(
+        features_dir=synthetic_features,
+        output_dir=tmp_path / "out",
+        policies=["ma_reap"],
+        n_seeds=2,
+        policy_params={
+            "ma_reap": {
+                "agents": {"agent_a": ["traj_0"], "agent_b": ["traj_1"]},
+            }
+        },
+    )
+    kwargs = build_policy_kwargs(
+        "ma_reap",
+        config,
+        n_features=4,
+        traj_names=["traj_0", "traj_1"],
+        n_clusters=3,
+    )
+    assert "agent_assignments" in kwargs
+
+
+def test_run_adaptive_sampling_with_ma_reap(
+    tmp_path: Path,
+    synthetic_features: Path,
+) -> None:
+    """End-to-end MA-REAP run produces seeds and sidecar artifacts."""
+    output_dir = tmp_path / "results_ma_reap"
+    config_path = tmp_path / "config_ma_reap.yaml"
+    config_path.write_text(
+        f"""
+features_dir: {synthetic_features}
+output_dir: {output_dir}
+clustering:
+  method: kmeans
+  n_clusters: 3
+policies:
+  - ma_reap
+policy_params:
+  ma_reap:
+    n_candidates: 3
+    agents:
+      agent_a: [traj_0]
+      agent_b: [traj_1]
+    delta: 0.05
+    regime: collaborative
+n_seeds: 2
+random_seed: 7
+write_pdbs: false
+""",
+        encoding="utf-8",
+    )
+
+    results = run_adaptive_sampling(config_path)
+    assert "ma_reap" in results
+    assert len(results["ma_reap"]) == 2
+    policy_dir = output_dir / "ma_reap"
+    assert (policy_dir / "seeds.csv").is_file()
+    assert (policy_dir / "scores.csv").is_file()
+    assert (policy_dir / "agent_weights.csv").is_file()
+    assert (policy_dir / "stakes.csv").is_file()
+    assert (policy_dir / "executors.csv").is_file()

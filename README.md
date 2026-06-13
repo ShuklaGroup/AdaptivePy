@@ -20,7 +20,7 @@ AdaptivePy helps you identify under-sampled regions of conformational space and 
 |---|---|
 | **Input** | Feature arrays (`.npy` / `.pkl`), optional coordinate trajectories |
 | **Clustering** | KMeans, MiniBatch KMeans, regular-space |
-| **Policies** | Least counts, random, FAST (extensible) |
+| **Policies** | Least counts, random, FAST, MA-REAP (extensible) |
 | **Output** | Seeds, cluster assignments, model, logs, optional PDBs |
 
 ## Installation

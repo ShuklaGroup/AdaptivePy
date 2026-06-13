@@ -25,3 +25,11 @@
         - FastPolicy
         - compute_fast_rewards
         - feature_scale
+
+::: adaptivepy.policies.ma_reap
+    options:
+      members:
+        - MaReapPolicy
+        - aggregate_agent_scores
+        - apply_stakes_method
+        - compute_agent_scores

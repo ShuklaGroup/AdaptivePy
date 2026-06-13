@@ -56,6 +56,17 @@ cluster_id,population
 2,67
 ```
 
+### MA-REAP sidecar files
+
+When using the `ma_reap` policy, additional CSV files are written:
+
+| File | Description |
+|------|-------------|
+| `scores.csv` | Per-candidate aggregate and per-agent scores |
+| `agent_weights.csv` | Learned CV weights per agent and feature index |
+| `stakes.csv` | Agent stakes per candidate cluster |
+| `executors.csv` | Which agent executes each selected seed |
+
 ## PDB export
 
 When `trajectories_dir`, `topology`, and `write_pdbs: true` are set, selected seed

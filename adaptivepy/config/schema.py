@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
+import numpy as np
 import yaml
 
 
@@ -185,10 +186,159 @@ def validate_fast_policy_params(
     return kwargs
 
 
+def validate_ma_reap_policy_params(
+    params: Dict[str, Any],
+    traj_names: Sequence[str],
+    n_features: int,
+    n_seeds: int = DEFAULT_N_SEEDS,
+    n_clusters: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Validate and normalize MA-REAP policy parameters.
+
+    Parameters
+    ----------
+    params : dict
+        Raw MA-REAP settings from configuration.
+    traj_names : sequence of str
+        Feature file stems in the loaded dataset.
+    n_features : int
+        Number of feature dimensions.
+    n_seeds : int
+        Seeds to select per policy run.
+    n_clusters : int or None
+        Number of populated clusters after clustering.
+
+    Returns
+    -------
+    dict
+        Normalized keyword arguments for :class:`MaReapPolicy`.
+    """
+    if "agents" not in params:
+        raise ValueError(
+            "MA-REAP policy requires 'agents' in policy_params.ma_reap."
+        )
+
+    agents_raw = params["agents"]
+    if not isinstance(agents_raw, dict) or len(agents_raw) < 2:
+        raise ValueError(
+            "MA-REAP 'agents' must map at least two agent names to trajectory lists."
+        )
+
+    agent_assignments: Dict[str, List[str]] = {}
+    seen_stems: set[str] = set()
+    for agent_name, stems in agents_raw.items():
+        if isinstance(stems, str):
+            stems = [stems]
+        if not isinstance(stems, (list, tuple)) or not stems:
+            raise ValueError(
+                f"MA-REAP agent '{agent_name}' must have a non-empty trajectory list."
+            )
+        normalized_stems = [str(s) for s in stems]
+        for stem in normalized_stems:
+            if stem not in traj_names:
+                raise ValueError(
+                    f"MA-REAP agent '{agent_name}' references unknown trajectory '{stem}'."
+                )
+            if stem in seen_stems:
+                raise ValueError(
+                    f"Trajectory '{stem}' is assigned to multiple MA-REAP agents."
+                )
+            seen_stems.add(stem)
+        agent_assignments[str(agent_name)] = normalized_stems
+
+    unassigned = set(traj_names) - seen_stems
+    if unassigned:
+        raise ValueError(
+            "MA-REAP requires every trajectory to be assigned to an agent. "
+            f"Unassigned: {sorted(unassigned)}"
+        )
+
+    n_candidates = params.get("n_candidates")
+    if n_candidates is None:
+        n_candidates = max(n_seeds, n_seeds * 3)
+    n_candidates = int(n_candidates)
+    if n_candidates < n_seeds:
+        raise ValueError(
+            f"MA-REAP n_candidates ({n_candidates}) must be >= n_seeds ({n_seeds})."
+        )
+    if n_clusters is not None:
+        if n_clusters < n_seeds:
+            raise ValueError(
+                f"MA-REAP requires at least {n_seeds} clusters, got {n_clusters}."
+            )
+        if n_candidates > n_clusters:
+            n_candidates = n_clusters
+
+    delta = float(params.get("delta", 0.05))
+    if not (0.0 < delta < 1.0):
+        raise ValueError("MA-REAP 'delta' must be in (0, 1).")
+
+    stakes_method = str(params.get("stakes_method", "percentage"))
+    if stakes_method not in {"percentage", "equal", "max", "logistic"}:
+        raise ValueError(
+            "MA-REAP 'stakes_method' must be one of: "
+            "percentage, equal, max, logistic."
+        )
+
+    stakes_k = params.get("stakes_k")
+    if stakes_method == "logistic":
+        if stakes_k is None:
+            raise ValueError(
+                "MA-REAP 'stakes_k' is required when stakes_method is 'logistic'."
+            )
+        stakes_k = float(stakes_k)
+    elif stakes_k is not None:
+        stakes_k = float(stakes_k)
+
+    regime = str(params.get("regime", "collaborative"))
+    if regime not in {"collaborative", "noncollaborative", "competitive"}:
+        raise ValueError(
+            "MA-REAP 'regime' must be collaborative, noncollaborative, or competitive."
+        )
+
+    initial_weights = params.get("initial_weights")
+    if initial_weights is not None:
+        initial_weights = np.asarray(initial_weights, dtype=float)
+        n_agents = len(agent_assignments)
+        valid_1d = initial_weights.ndim == 1 and initial_weights.shape[0] == n_features
+        valid_2d = (
+            initial_weights.ndim == 2
+            and initial_weights.shape == (n_agents, n_features)
+        )
+        if not (valid_1d or valid_2d):
+            raise ValueError(
+                f"MA-REAP initial_weights must have shape ({n_features},) or "
+                f"({n_agents}, {n_features})."
+            )
+        if np.any(initial_weights < 0):
+            raise ValueError("MA-REAP initial_weights must be non-negative.")
+        if valid_1d and not np.isclose(initial_weights.sum(), 1.0):
+            raise ValueError("MA-REAP initial_weights must sum to 1.")
+        if valid_2d and not np.allclose(initial_weights.sum(axis=1), 1.0):
+            raise ValueError("MA-REAP initial_weights rows must each sum to 1.")
+
+    kwargs: Dict[str, Any] = {
+        "agent_assignments": agent_assignments,
+        "traj_names": list(traj_names),
+        "n_candidates": n_candidates,
+        "delta": delta,
+        "stakes_method": stakes_method,
+        "regime": regime,
+    }
+    if stakes_k is not None:
+        kwargs["stakes_k"] = stakes_k
+    if initial_weights is not None:
+        kwargs["initial_weights"] = initial_weights
+    return kwargs
+
+
 def build_policy_kwargs(
     policy_name: str,
     config: RunConfig,
     n_features: Optional[int] = None,
+    traj_names: Optional[Sequence[str]] = None,
+    n_clusters: Optional[int] = None,
+    n_seeds: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Build constructor keyword arguments for a configured policy.
 
@@ -208,6 +358,7 @@ def build_policy_kwargs(
     """
     kwargs: Dict[str, Any] = {}
     params = config.policy_params.get(policy_name, {})
+    seeds = n_seeds if n_seeds is not None else config.n_seeds
 
     if policy_name == "random":
         kwargs["random_state"] = config.random_seed
@@ -215,6 +366,20 @@ def build_policy_kwargs(
         if n_features is None:
             raise ValueError("FAST policy validation requires feature dimensionality.")
         kwargs.update(validate_fast_policy_params(params, n_features))
+    elif policy_name == "ma_reap":
+        if n_features is None or traj_names is None:
+            raise ValueError(
+                "MA-REAP policy validation requires feature dimensionality and traj_names."
+            )
+        kwargs.update(
+            validate_ma_reap_policy_params(
+                params,
+                traj_names=traj_names,
+                n_features=n_features,
+                n_seeds=seeds,
+                n_clusters=n_clusters,
+            )
+        )
 
     return kwargs
 

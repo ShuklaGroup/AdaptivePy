@@ -20,6 +20,16 @@ policies:
 #     directions: [maximize]
 #     alpha: 1.0
 
+# Example MA-REAP policy settings (uncomment with policies: [ma_reap])
+# policy_params:
+#   ma_reap:
+#     n_candidates: 6
+#     agents:
+#       agent_0: [traj_0]
+#       agent_1: [traj_1]
+#     delta: 0.05
+#     regime: collaborative
+
 n_seeds: 3
 
 seed_selection:

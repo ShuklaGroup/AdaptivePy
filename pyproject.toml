@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "adaptivepy-sampling"
-version = "0.1.2"
+version = "0.2.0"
 description = "Adaptive sampling on MD trajectories via clustering and policy-driven seed selection"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -17,6 +17,7 @@ dependencies = [
     "click>=8.0",
     "joblib>=1.0",
     "mdtraj>=1.9",
+    "scipy>=1.7",
 ]
 
 [project.optional-dependencies]

@@ -29,6 +29,7 @@ from adaptivepy.output.writer import (
     write_cluster_statistics,
     write_combined_metadata,
     write_fast_scores,
+    write_ma_reap_outputs,
     write_policy_outputs,
     write_run_config,
 )
@@ -142,8 +143,14 @@ def run_adaptive_sampling(
     for policy_name in config.policies:
         logger.info("Applying policy: %s", policy_name)
         policy_kwargs = build_policy_kwargs(
-            policy_name, config, n_features=n_features
+            policy_name,
+            config,
+            n_features=n_features,
+            traj_names=dataset.traj_names,
+            n_clusters=len(cluster_stats),
         )
+        if policy_name == "ma_reap":
+            policy_kwargs["cluster_centers"] = centers
 
         policy = get_policy(policy_name, **policy_kwargs)
         selected_clusters = policy.select_clusters(
@@ -165,6 +172,17 @@ def run_adaptive_sampling(
 
         if policy_name == "fast" and hasattr(policy, "last_scores"):
             write_fast_scores(policy.last_scores, policy_dir)
+
+        if policy_name == "ma_reap" and hasattr(policy, "last_scores"):
+            write_ma_reap_outputs(
+                scores=policy.last_scores,
+                weights=policy.last_weights,
+                stakes=policy.last_stakes,
+                executors=policy.last_executors,
+                agent_names=policy.agent_names,
+                seeds=seeds,
+                output_dir=policy_dir,
+            )
 
         if (
             config.write_pdbs
@@ -231,7 +249,12 @@ def validate_config(config_path: str | Path) -> RunConfig:
     for policy_name in config.policies:
         get_policy(
             policy_name,
-            **build_policy_kwargs(policy_name, config, n_features=n_features),
+            **build_policy_kwargs(
+                policy_name,
+                config,
+                n_features=n_features,
+                traj_names=dataset.traj_names,
+            ),
         )
 
     return config

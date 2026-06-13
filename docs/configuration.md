@@ -84,6 +84,21 @@ policy_params:
 
 See [Policies](policies.md) for algorithm details.
 
+### MA-REAP (`ma_reap`)
+
+| Key | Required | Default | Description |
+|-----|----------|---------|-------------|
+| `agents` | yes | — | Map agent names to feature file stems |
+| `n_candidates` | no | `max(n_seeds, 3*n_seeds)` | Least-count candidates to score |
+| `initial_weights` | no | uniform | CV weights, shared or per-agent |
+| `delta` | no | `0.05` | Max per-feature weight update |
+| `stakes_method` | no | `percentage` | `percentage`, `equal`, `max`, `logistic` |
+| `stakes_k` | if logistic | — | Logistic steepness |
+| `regime` | no | `collaborative` | `collaborative`, `noncollaborative`, `competitive` |
+
+Every feature trajectory must be assigned to exactly one agent. At least two
+agents are required.
+
 ## Clustering methods
 
 ### `kmeans`
