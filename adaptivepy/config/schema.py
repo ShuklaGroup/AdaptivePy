@@ -55,7 +55,7 @@ class RunConfig:
     Attributes
     ----------
     features_dir : Path
-        Directory containing ``*.npy`` feature files.
+        Directory containing ``*.npy`` or ``*.pkl`` feature files.
     output_dir : Path
         Directory where results are written.
     trajectories_dir : Path or None

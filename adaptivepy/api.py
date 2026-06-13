@@ -11,6 +11,7 @@ import numpy as np
 from adaptivepy.clustering import create_clusterer, fit_clusterer
 from adaptivepy.config.schema import RunConfig, load_config
 from adaptivepy.io.loader import (
+    list_feature_files,
     list_trajectory_files,
     load_features,
     validate_dataset,
@@ -84,7 +85,7 @@ def run_adaptive_sampling(
     np.random.seed(config.random_seed)
 
     # --- Load and validate data ---
-    feature_files = sorted(Path(config.features_dir).glob("*.npy"))
+    feature_files = list_feature_files(config.features_dir)
     trajectory_files: Optional[List[Path]] = None
     trajectory_map: Optional[Dict[int, Path]] = None
 
@@ -199,9 +200,7 @@ def validate_config(config_path: str | Path) -> RunConfig:
     config_path = Path(config_path)
     config = load_config(config_path)
 
-    feature_files = sorted(Path(config.features_dir).glob("*.npy"))
-    if not feature_files:
-        raise ValueError(f"No feature files in {config.features_dir}")
+    feature_files = list_feature_files(config.features_dir)
 
     trajectory_files = None
     if config.trajectories_dir is not None:

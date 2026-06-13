@@ -6,15 +6,18 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import joblib
 import numpy as np
 
 from adaptivepy.models import Dataset, FrameRecord
 
 logger = logging.getLogger(__name__)
 
+FEATURE_EXTENSIONS = (".npy", ".pkl")
+
 
 def list_feature_files(features_dir: Path) -> List[Path]:
-    """List ``*.npy`` feature files in a directory, sorted by name.
+    """List ``*.npy`` and ``*.pkl`` feature files in a directory, sorted by stem.
 
     Parameters
     ----------
@@ -24,23 +27,78 @@ def list_feature_files(features_dir: Path) -> List[Path]:
     Returns
     -------
     list of Path
-        Sorted paths to feature files.
+        Sorted paths to feature files (one file per trajectory stem).
 
     Raises
     ------
     FileNotFoundError
         If the directory does not exist.
     ValueError
-        If no ``*.npy`` files are found.
+        If no supported feature files are found or duplicate stems exist.
     """
     features_dir = Path(features_dir)
     if not features_dir.is_dir():
         raise FileNotFoundError(f"Features directory not found: {features_dir}")
 
-    files = sorted(features_dir.glob("*.npy"))
+    files_by_stem: Dict[str, Path] = {}
+    for path in sorted(features_dir.iterdir()):
+        if not path.is_file():
+            continue
+        suffix = path.suffix.lower()
+        if suffix not in FEATURE_EXTENSIONS:
+            continue
+        stem = path.stem
+        if stem in files_by_stem:
+            raise ValueError(
+                f"Duplicate feature files for '{stem}': "
+                f"{files_by_stem[stem].name} and {path.name}"
+            )
+        files_by_stem[stem] = path
+
+    files = [files_by_stem[stem] for stem in sorted(files_by_stem)]
     if not files:
-        raise ValueError(f"No .npy feature files found in {features_dir}")
+        raise ValueError(
+            f"No .npy or .pkl feature files found in {features_dir}"
+        )
     return files
+
+
+def load_feature_array(path: Path) -> np.ndarray:
+    """Load a feature array from a ``.npy`` or ``.pkl`` file.
+
+    Parameters
+    ----------
+    path : Path
+        Path to a feature file.
+
+    Returns
+    -------
+    np.ndarray
+        Loaded feature array.
+
+    Raises
+    ------
+    ValueError
+        If the file extension is unsupported or the loaded object cannot be
+        converted to an array.
+    """
+    suffix = path.suffix.lower()
+    if suffix == ".npy":
+        data = np.load(path)
+    elif suffix == ".pkl":
+        data = joblib.load(path)
+    else:
+        raise ValueError(
+            f"Unsupported feature file extension '{suffix}' in {path}. "
+            f"Use one of: {', '.join(FEATURE_EXTENSIONS)}"
+        )
+
+    try:
+        return np.asarray(data)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"Feature file {path} does not contain a numeric array."
+        ) from exc
 
 
 def list_trajectory_files(trajectories_dir: Path) -> List[Path]:
@@ -96,7 +154,7 @@ def validate_feature_trajectory_mapping(
     Parameters
     ----------
     feature_files : list of Path
-        Feature ``.npy`` file paths.
+        Feature ``.npy`` or ``.pkl`` file paths.
     trajectory_files : list of Path or None
         Optional coordinate trajectory file paths.
 
@@ -130,8 +188,9 @@ def validate_feature_trajectory_mapping(
 def load_features(features_dir: Path) -> Dataset:
     """Load feature arrays from disk and build a :class:`Dataset`.
 
-    Each ``*.npy`` file must have shape ``(n_frames, n_features)``. Per-frame
-    ``FrameRecord`` objects are created while preserving trajectory identity.
+    Each ``*.npy`` or ``*.pkl`` file must have shape ``(n_frames, n_features)``.
+    Per-frame ``FrameRecord`` objects are created while preserving trajectory
+    identity.
 
     Parameters
     ----------
@@ -157,7 +216,7 @@ def load_features(features_dir: Path) -> Dataset:
     n_features: Optional[int] = None
 
     for traj_id, feature_path in enumerate(feature_files):
-        features = np.load(feature_path)
+        features = load_feature_array(feature_path)
         if features.ndim != 2:
             raise ValueError(
                 f"Feature file {feature_path} must be 2D (n_frames, n_features), "

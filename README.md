@@ -10,7 +10,7 @@ pip install adaptivepy-sampling
 
 ## Quick start
 
-1. Prepare feature files (`features/traj_0.npy`, ...) with shape `(n_frames, n_features)`.
+1. Prepare feature files (`features/traj_0.npy` or `traj_0.pkl`, ...) with shape `(n_frames, n_features)`.
 2. Optionally add matching coordinate trajectories (`trajectories/traj_0.xtc`, ...) and a topology file.
 3. Edit `examples/config.yaml` and run:
 
