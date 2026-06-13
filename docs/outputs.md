@@ -56,16 +56,34 @@ cluster_id,population
 2,67
 ```
 
+### FAST sidecar files
+
+When using the `fast` policy, `fast/scores.csv` is written with columns:
+`cluster_id`, `directed_score`, `exploration_score`, `reward`, `population`.
+
 ### MA-REAP sidecar files
 
-When using the `ma_reap` policy, additional CSV files are written:
+When using the `ma_reap` policy, additional CSV files are written under
+`ma_reap/`:
 
 | File | Description |
 |------|-------------|
-| `scores.csv` | Per-candidate aggregate and per-agent scores |
-| `agent_weights.csv` | Learned CV weights per agent and feature index |
-| `stakes.csv` | Agent stakes per candidate cluster |
-| `executors.csv` | Which agent executes each selected seed |
+| `scores.csv` | Per-candidate `aggregate_score`, `population`, and `score_{agent}` columns |
+| `agent_weights.csv` | Learned CV weights: `agent`, `feature_index`, `weight` |
+| `stakes.csv` | Agent stakes per candidate: `cluster_id`, `stake_{agent}` columns |
+| `executors.csv` | Seed executor assignment: `seed_id`, `cluster_id`, `executor_agent` |
+
+Example `ma_reap/executors.csv`:
+
+```csv
+seed_id,cluster_id,executor_agent
+0,3,agent_0
+1,7,agent_1
+```
+
+MA-REAP requires assigning every feature trajectory to an agent via
+`policy_params.ma_reap.agents`. See [Features](features.md#agent-assignment-for-ma-reap)
+and [Policies](policies.md#ma_reap).
 
 ## PDB export
 

@@ -10,6 +10,8 @@
         - write_seeds_csv
         - write_combined_metadata
         - write_policy_outputs
+        - write_fast_scores
+        - write_ma_reap_outputs
 
 ::: adaptivepy.output.pdb_writer
     options:

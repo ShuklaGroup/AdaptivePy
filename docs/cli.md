@@ -39,7 +39,20 @@ Example output:
 ```text
 least_counts
 random
+fast
+ma_reap
 ```
+
+Built-in policies:
+
+| Policy | Description |
+|--------|-------------|
+| `least_counts` | Select least-populated clusters |
+| `random` | Random cluster sampling |
+| `fast` | Feature-directed exploration/exploitation (Zimmerman & Bowman 2015) |
+| `ma_reap` | Multiagent REAP with agent stakes and learned CV weights (Kleiman & Shukla 2022) |
+
+See [Policies](policies.md) for configuration details.
 
 ## Version
 

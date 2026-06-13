@@ -22,9 +22,9 @@ pip install adaptivepy-sampling
 
 1. Load per-trajectory feature arrays (`.npy` or `.pkl`)
 2. Cluster frames in feature space
-3. Apply one or more adaptive policies
-4. Select seed frames from under-sampled clusters
-5. Write metadata, assignments, and optional PDB structures
+3. Apply one or more adaptive policies (`least_counts`, `random`, `fast`, `ma_reap`)
+4. Select seed frames from chosen clusters
+5. Write metadata, assignments, policy-specific scores, and optional PDB structures
 
 ## Example
 

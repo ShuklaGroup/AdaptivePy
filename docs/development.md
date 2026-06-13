@@ -65,7 +65,15 @@ adaptivepy/
 1. Create a module in `adaptivepy/policies/`
 2. Subclass `Policy` and use `@register_policy`
 3. Import the module in `adaptivepy/policies/__init__.py`
-4. Add tests and document in [Policies](policies.md)
+4. If the policy needs YAML settings, add validation in
+   `adaptivepy/config/schema.py` and extend `build_policy_kwargs`
+5. Add tests and document in [Policies](policies.md)
+
+Existing examples with `policy_params`:
+
+- `fast` — feature indices, directions, weights, `alpha`; writes `scores.csv`
+- `ma_reap` — agent-to-trajectory mapping, stakes, `delta`, regime; writes
+  sidecar CSVs (`scores.csv`, `agent_weights.csv`, `stakes.csv`, `executors.csv`)
 
 ## CI workflows
 

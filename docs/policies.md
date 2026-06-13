@@ -122,6 +122,17 @@ results/
 ├── random/
 │   ├── seeds.csv
 │   └── metadata.csv
+├── fast/
+│   ├── seeds.csv
+│   ├── metadata.csv
+│   └── scores.csv
+├── ma_reap/
+│   ├── seeds.csv
+│   ├── metadata.csv
+│   ├── scores.csv
+│   ├── agent_weights.csv
+│   ├── stakes.csv
+│   └── executors.csv
 └── combined_metadata.csv
 ```
 

@@ -63,6 +63,7 @@ Some policies accept extra settings under `policy_params`:
 ```yaml
 policies:
   - fast
+  - ma_reap
   - least_counts
 
 policy_params:
@@ -71,6 +72,14 @@ policy_params:
     directions: [maximize, minimize]
     weights: [0.7, 0.3]
     alpha: 1.0
+  ma_reap:
+    n_candidates: 12
+    agents:
+      agent_0: [traj_0, traj_1]
+      agent_1: [traj_2, traj_3]
+    delta: 0.05
+    stakes_method: percentage
+    regime: collaborative
 ```
 
 ### FAST (`fast`)

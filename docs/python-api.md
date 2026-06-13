@@ -37,8 +37,11 @@ results = run_adaptive_sampling("config.yaml", config=config)
 from adaptivepy.api import validate_config
 
 config = validate_config("config.yaml")
-print(config.features_dir, config.policies)
+print(config.features_dir, config.policies, config.policy_params)
 ```
+
+Goal-oriented policies (`fast`, `ma_reap`) read settings from `config.policy_params`.
+See [Configuration](configuration.md#policy-parameters) and [Policies](policies.md).
 
 ## Workflow overview
 

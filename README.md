@@ -73,6 +73,22 @@ from adaptivepy import run_adaptive_sampling
 results = run_adaptive_sampling("config.yaml")
 ```
 
+## Policies
+
+Built-in seed-selection policies:
+
+| Policy | Use case |
+|--------|----------|
+| `least_counts` | Target under-sampled clusters |
+| `random` | Baseline random sampling |
+| `fast` | Goal-directed sampling via feature columns (Zimmerman & Bowman 2015) |
+| `ma_reap` | Multi-agent coordinated sampling with learned CV weights (Kleiman & Shukla 2022) |
+
+`fast` and `ma_reap` accept extra YAML under `policy_params`. MA-REAP requires
+mapping each trajectory to an agent. See the
+[Policies guide](https://hnadeem2.github.io/AdaptivePy/policies/) and
+[Configuration](https://hnadeem2.github.io/AdaptivePy/configuration/).
+
 ## Documentation
 
 | Guide | Description |

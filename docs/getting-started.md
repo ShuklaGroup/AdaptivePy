@@ -72,7 +72,8 @@ adaptivepy run examples/config.yaml
 
 ## 6. Inspect results
 
-After a successful run, `output_dir` contains:
+After a successful run, `output_dir` contains shared clustering artifacts plus
+one subdirectory per policy:
 
 ```text
 results/
@@ -90,11 +91,16 @@ results/
 └── combined_metadata.csv
 ```
 
+When using `fast` or `ma_reap`, those policies add their own subdirectories
+with extra score sidecars — see [Outputs](outputs.md).
+
 See [Outputs](outputs.md) for a full description of each file.
 
 ## Next steps
 
 - Add coordinate trajectories and topology for PDB export — see
   [Configuration](configuration.md)
-- Compare policies — see [Policies](policies.md)
+- Compare policies — see [Policies](policies.md) (`least_counts`, `random`, `fast`, `ma_reap`)
+- Use goal-oriented sampling with `fast` or multi-agent `ma_reap` — see
+  [Configuration](configuration.md#policy-parameters) and [Policies](policies.md)
 - Integrate into a pipeline — see [Python API](python-api.md)
