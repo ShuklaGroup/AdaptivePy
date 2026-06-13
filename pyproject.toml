@@ -8,8 +8,8 @@ version = "0.1.2"
 description = "Adaptive sampling on MD trajectories via clustering and policy-driven seed selection"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT" }
-authors = [{ name = "AdaptivePy Contributors" }]
+license = { file = "LICENSE" }
+authors = [{ name = "Hassan" }]
 dependencies = [
     "numpy>=1.20",
     "scikit-learn>=1.0",

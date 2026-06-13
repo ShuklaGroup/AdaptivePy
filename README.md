@@ -83,6 +83,10 @@ results = run_adaptive_sampling("config.yaml")
 | [Policies](https://hnadeem2.github.io/AdaptivePy/policies/) | Seed selection strategies |
 | [API Reference](https://hnadeem2.github.io/AdaptivePy/reference/api/) | Module documentation |
 
+## Contributors
+
+- Hassan
+
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE) for details.
