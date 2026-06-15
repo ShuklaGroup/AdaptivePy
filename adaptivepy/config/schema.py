@@ -332,6 +332,30 @@ def validate_ma_reap_policy_params(
     return kwargs
 
 
+def validate_knn_as_policy_params(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and normalize kNN-AS policy parameters.
+
+    Parameters
+    ----------
+    params : dict
+        Raw kNN-AS policy settings from configuration.
+
+    Returns
+    -------
+    dict
+        Normalized keyword arguments for :class:`KnnAsPolicy`.
+    """
+    k = int(params.get("k", 5))
+    if k < 2:
+        raise ValueError("kNN-AS 'k' must be >= 2.")
+
+    scoring = str(params.get("scoring", "vectorsum"))
+    if scoring not in {"vectorsum", "distance"}:
+        raise ValueError("kNN-AS 'scoring' must be 'vectorsum' or 'distance'.")
+
+    return {"k": k, "scoring": scoring}
+
+
 def build_policy_kwargs(
     policy_name: str,
     config: RunConfig,
@@ -380,6 +404,8 @@ def build_policy_kwargs(
                 n_clusters=n_clusters,
             )
         )
+    elif policy_name == "knn_as":
+        kwargs.update(validate_knn_as_policy_params(params))
 
     return kwargs
 

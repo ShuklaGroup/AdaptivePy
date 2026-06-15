@@ -55,6 +55,34 @@ policy_params:
 
 FAST writes an additional `fast/scores.csv` with per-cluster reward components.
 
+### `knn_as`
+
+Implements k-nearest-neighbors adaptive sampling based on
+[ERovers/kNN-AS](https://github.com/ERovers/kNN-AS). The upstream algorithm ranks
+states by nearest-neighbor geometry; AdaptivePy applies the same score to cluster
+representatives because policies select clusters before frame-level seed
+selection.
+
+Configure via `policy_params`:
+
+```yaml
+policies:
+  - knn_as
+
+policy_params:
+  knn_as:
+    k: 5
+    scoring: vectorsum
+```
+
+| Key | Required | Default | Description |
+|-----|----------|---------|-------------|
+| `k` | no | `5` | Nearest-neighbor records requested; clamped to available clusters |
+| `scoring` | no | `vectorsum` | `vectorsum` for summed displacement magnitude, or `distance` for mean neighbor distance |
+
+kNN-AS writes `knn_as/scores.csv` with per-cluster scores and the effective
+neighbor count used for the run.
+
 ### `ma_reap`
 
 Implements **MA-REAP** (Multiagent REAP) from Kleiman & Shukla (2022). Extends
@@ -123,6 +151,10 @@ results/
 │   ├── seeds.csv
 │   └── metadata.csv
 ├── fast/
+│   ├── seeds.csv
+│   ├── metadata.csv
+│   └── scores.csv
+├── knn_as/
 │   ├── seeds.csv
 │   ├── metadata.csv
 │   └── scores.csv

@@ -14,12 +14,14 @@ from adaptivepy.config.schema import (
     build_policy_kwargs,
     load_config,
     validate_fast_policy_params,
+    validate_knn_as_policy_params,
     validate_ma_reap_policy_params,
 )
 from adaptivepy.io.loader import load_feature_array, load_features
 from adaptivepy.models import FrameRecord
 from adaptivepy.policies import list_policies
 from adaptivepy.policies.fast import FastPolicy, compute_fast_rewards, feature_scale
+from adaptivepy.policies.knn_as import KnnAsPolicy, compute_knn_as_scores
 from adaptivepy.policies.ma_reap import (
     MaReapPolicy,
     aggregate_agent_scores,
@@ -87,12 +89,92 @@ def synthetic_features(tmp_path: Path) -> Path:
 
 
 def test_list_policies() -> None:
-    """Registered policies include least_counts, random, fast, and ma_reap."""
+    """Registered policies include all built-in policies."""
     policies = list_policies()
     assert "least_counts" in policies
     assert "random" in policies
     assert "fast" in policies
     assert "ma_reap" in policies
+    assert "knn_as" in policies
+
+
+def test_compute_knn_as_scores_vectorsum() -> None:
+    """Vector-sum scoring ranks locally asymmetric states highest."""
+    vectors = np.array(
+        [
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [10.0, 10.0],
+        ]
+    )
+    scores, effective_k = compute_knn_as_scores(vectors, k=3, scoring="vectorsum")
+    assert effective_k == 3
+    assert int(np.argmax(scores)) == 3
+
+
+def test_compute_knn_as_scores_distance() -> None:
+    """Distance scoring ranks isolated states highest."""
+    vectors = np.array(
+        [
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [10.0, 10.0],
+        ]
+    )
+    scores, effective_k = compute_knn_as_scores(vectors, k=3, scoring="distance")
+    assert effective_k == 3
+    assert int(np.argmax(scores)) == 3
+
+
+def test_compute_knn_as_scores_clamps_k() -> None:
+    """kNN-AS clamps k to the number of available states."""
+    vectors = np.array([[0.0], [2.0]])
+    scores, effective_k = compute_knn_as_scores(vectors, k=5)
+    assert effective_k == 2
+    assert scores.shape == (2,)
+
+
+def test_compute_knn_as_scores_rejects_invalid_params() -> None:
+    """Invalid kNN-AS scoring inputs raise clear errors."""
+    vectors = np.array([[0.0], [1.0]])
+    with pytest.raises(ValueError, match="k"):
+        compute_knn_as_scores(vectors, k=1)
+    with pytest.raises(ValueError, match="scoring"):
+        compute_knn_as_scores(vectors, k=2, scoring="bad")  # type: ignore[arg-type]
+
+
+def test_knn_as_policy_selects_cluster_ids_and_records_scores() -> None:
+    """kNN-AS selects cluster IDs and records score metadata."""
+    cluster_stats = _make_cluster_stats(
+        {
+            10: [[0.0, 0.0]],
+            11: [[1.0, 0.0]],
+            12: [[0.0, 1.0]],
+            13: [[10.0, 10.0]],
+        }
+    )
+    policy = KnnAsPolicy(k=3, scoring="distance")
+    selected = policy.select_clusters(cluster_stats, n_seeds=2)
+    assert selected[0] == 13
+    assert set(selected).issubset(cluster_stats.keys())
+    assert policy.last_scores[13]["scoring"] == "distance"
+    assert policy.last_scores[13]["effective_k"] == 3
+
+
+def test_knn_as_policy_tie_breaks_by_population_then_cluster_id() -> None:
+    """Equal kNN-AS scores use deterministic population and ID tie-breaks."""
+    cluster_stats = _make_cluster_stats(
+        {
+            0: [[0.0], [0.0]],
+            1: [[0.0]],
+            2: [[0.0]],
+        }
+    )
+    policy = KnnAsPolicy(k=2)
+    selected = policy.select_clusters(cluster_stats, n_seeds=3)
+    assert selected == [1, 2, 0]
 
 
 def test_feature_scale_maximize_and_minimize() -> None:
@@ -179,6 +261,23 @@ def test_validate_fast_policy_params() -> None:
     assert "directions" not in kwargs
 
 
+def test_validate_knn_as_policy_params_defaults_and_explicit() -> None:
+    """kNN-AS config validation normalizes defaults and explicit settings."""
+    defaults = validate_knn_as_policy_params({})
+    assert defaults == {"k": 5, "scoring": "vectorsum"}
+
+    kwargs = validate_knn_as_policy_params({"k": 3, "scoring": "distance"})
+    assert kwargs == {"k": 3, "scoring": "distance"}
+
+
+def test_validate_knn_as_policy_params_rejects_invalid_values() -> None:
+    """kNN-AS config validation rejects invalid k and scoring."""
+    with pytest.raises(ValueError, match="k"):
+        validate_knn_as_policy_params({"k": 1})
+    with pytest.raises(ValueError, match="scoring"):
+        validate_knn_as_policy_params({"scoring": "bad"})
+
+
 def test_validate_fast_policy_params_rejects_invalid_index() -> None:
     """Out-of-range feature indices raise during validation."""
     with pytest.raises(ValueError, match="out of range"):
@@ -216,6 +315,18 @@ def test_build_policy_kwargs_fast(tmp_path: Path, synthetic_features: Path) -> N
     )
     kwargs = build_policy_kwargs("fast", config, n_features=4)
     assert kwargs["feature_indices"] == [0]
+
+
+def test_build_policy_kwargs_knn_as(tmp_path: Path, synthetic_features: Path) -> None:
+    """build_policy_kwargs validates kNN-AS settings."""
+    config = RunConfig(
+        features_dir=synthetic_features,
+        output_dir=tmp_path / "out",
+        policies=["knn_as"],
+        policy_params={"knn_as": {"k": 4, "scoring": "distance"}},
+    )
+    kwargs = build_policy_kwargs("knn_as", config, n_features=4)
+    assert kwargs == {"k": 4, "scoring": "distance"}
 
 
 def test_validate_config_requires_fast_feature_indices(
@@ -271,6 +382,40 @@ write_pdbs: false
     assert len(results["fast"]) == 2
     assert (output_dir / "fast" / "seeds.csv").is_file()
     assert (output_dir / "fast" / "scores.csv").is_file()
+
+
+def test_run_adaptive_sampling_with_knn_as(
+    tmp_path: Path,
+    synthetic_features: Path,
+) -> None:
+    """End-to-end kNN-AS run produces seeds and score artifacts."""
+    output_dir = tmp_path / "results_knn_as"
+    config_path = tmp_path / "config_knn_as.yaml"
+    config_path.write_text(
+        f"""
+features_dir: {synthetic_features}
+output_dir: {output_dir}
+clustering:
+  method: kmeans
+  n_clusters: 3
+policies:
+  - knn_as
+policy_params:
+  knn_as:
+    k: 3
+    scoring: vectorsum
+n_seeds: 2
+random_seed: 7
+write_pdbs: false
+""",
+        encoding="utf-8",
+    )
+
+    results = run_adaptive_sampling(config_path)
+    assert "knn_as" in results
+    assert len(results["knn_as"]) == 2
+    assert (output_dir / "knn_as" / "seeds.csv").is_file()
+    assert (output_dir / "knn_as" / "scores.csv").is_file()
 
 
 def test_run_adaptive_sampling(tmp_path: Path, synthetic_features: Path) -> None:

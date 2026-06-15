@@ -242,6 +242,30 @@ def write_fast_scores(
     return path
 
 
+def write_knn_as_scores(
+    scores: Dict[int, Dict[str, Any]],
+    output_dir: Path,
+) -> Path:
+    """Write kNN-AS scores to ``scores.csv``."""
+    path = ensure_dir(output_dir) / "scores.csv"
+    fieldnames = ["cluster_id", "score", "population", "scoring", "effective_k"]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for cluster_id in sorted(scores):
+            row = scores[cluster_id]
+            writer.writerow(
+                {
+                    "cluster_id": cluster_id,
+                    "score": row["score"],
+                    "population": int(row["population"]),
+                    "scoring": row["scoring"],
+                    "effective_k": int(row["effective_k"]),
+                }
+            )
+    return path
+
+
 def write_ma_reap_outputs(
     scores: Dict[int, Dict[str, float]],
     weights: Dict[str, List[float]],
