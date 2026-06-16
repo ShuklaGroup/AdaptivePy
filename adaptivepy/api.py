@@ -21,6 +21,13 @@ from adaptivepy.io.trajectory import (
     build_trajectory_map,
     validate_trajectory_frame_counts,
 )
+from adaptivepy.metapolicies import (
+    MetapolicyDecision,
+    allocation,
+    cluster_policy_ranking,
+    majority_polling,
+    maxent_cluster_ranking,
+)
 from adaptivepy.models import SeedResult
 from adaptivepy.output.pdb_writer import write_seed_pdbs
 from adaptivepy.output.writer import (
@@ -31,6 +38,7 @@ from adaptivepy.output.writer import (
     write_fast_scores,
     write_knn_as_scores,
     write_ma_reap_outputs,
+    write_metapolicy_votes,
     write_maxent_vampnet_scores,
     write_policy_outputs,
     write_run_config,
@@ -43,6 +51,17 @@ from adaptivepy.utils.io_utils import ensure_dir
 from adaptivepy.utils.logging import setup_logger
 
 logger = logging.getLogger(__name__)
+
+
+def _unique_policies(policies: List[str]) -> List[str]:
+    seen = set()
+    result: List[str] = []
+    for policy_name in policies:
+        if policy_name in seen:
+            continue
+        seen.add(policy_name)
+        result.append(policy_name)
+    return result
 
 
 def run_adaptive_sampling(
@@ -113,10 +132,20 @@ def run_adaptive_sampling(
             config.topology, trajectory_map, expected_counts
         )
 
+    execution_policies = list(config.policies)
+    if config.metapolicy.enabled:
+        execution_policies.extend(config.metapolicy.policies)
+        if config.metapolicy.name in execution_policies:
+            raise ValueError(
+                f"metapolicy.name '{config.metapolicy.name}' conflicts with a "
+                "base policy name."
+            )
+    execution_policies = _unique_policies(execution_policies)
+
     # --- Clustering (optional for frame-level policies) ---
     needs_clustering = any(
-        policy_requires_clustering(policy_name) for policy_name in config.policies
-    )
+        policy_requires_clustering(policy_name) for policy_name in execution_policies
+    ) or config.metapolicy.enabled
     cluster_stats = {}
     centers = None
     labels = None
@@ -157,7 +186,9 @@ def run_adaptive_sampling(
     # --- Policies ---
     policy_seeds: Dict[str, List[SeedResult]] = {}
 
-    for policy_name in config.policies:
+    policy_objects = {}
+
+    for policy_name in execution_policies:
         logger.info("Applying policy: %s", policy_name)
         policy_kwargs = build_policy_kwargs(
             policy_name,
@@ -173,6 +204,7 @@ def run_adaptive_sampling(
             policy_kwargs["cluster_centers"] = centers
 
         policy = get_policy(policy_name, **policy_kwargs)
+        policy_objects[policy_name] = policy
         if policy.requires_clustering:
             selected_clusters = policy.select_clusters(
                 cluster_stats, config.n_seeds
@@ -229,6 +261,106 @@ def run_adaptive_sampling(
 
         logger.info("Policy %s selected %d seeds", policy_name, len(seeds))
 
+    if config.metapolicy.enabled:
+        logger.info("Applying metapolicy: %s", config.metapolicy.name)
+        if not cluster_stats:
+            raise ValueError("Metapolicy requires populated cluster statistics.")
+
+        n_meta_seeds = int(config.metapolicy.n_seeds or config.n_seeds)
+        if config.metapolicy.strategy == "allocation":
+            default_rank_depth = len(cluster_stats)
+        else:
+            default_rank_depth = n_meta_seeds
+        rank_depth = int(config.metapolicy.rank_depth or default_rank_depth)
+        if config.metapolicy.strategy == "allocation":
+            rank_depth = max(rank_depth, n_meta_seeds)
+        rank_depth = min(len(cluster_stats), rank_depth)
+        rankings = []
+
+        for policy_name in config.metapolicy.policies:
+            if policy_name == "maxent_vampnet":
+                policy = policy_objects[policy_name]
+                rankings.append(
+                    maxent_cluster_ranking(
+                        policy_name=policy_name,
+                        scores=getattr(policy, "last_scores", {}),
+                        dataset=dataset,
+                        cluster_stats=cluster_stats,
+                        rank_depth=rank_depth,
+                    )
+                )
+                continue
+
+            policy_kwargs = build_policy_kwargs(
+                policy_name,
+                config,
+                n_features=n_features,
+                traj_names=dataset.traj_names,
+                n_clusters=len(cluster_stats),
+                traj_index_map=dataset.traj_index_map,
+            )
+            if policy_name == "ma_reap":
+                policy_kwargs["cluster_centers"] = centers
+            if policy_name == "knn_as":
+                policy_kwargs["cluster_centers"] = centers
+            policy = get_policy(policy_name, **policy_kwargs)
+            rankings.append(
+                cluster_policy_ranking(
+                    policy_name=policy_name,
+                    policy=policy,
+                    cluster_stats=cluster_stats,
+                    rank_depth=rank_depth,
+                )
+            )
+
+        if config.metapolicy.strategy == "allocation":
+            decision: MetapolicyDecision = allocation(
+                rankings=rankings,
+                cluster_stats=cluster_stats,
+                allocations=config.metapolicy.allocations,
+                n_seeds=n_meta_seeds,
+                rank_depth=rank_depth,
+                weights=config.metapolicy.weights,
+            )
+        else:
+            decision = majority_polling(
+                rankings=rankings,
+                cluster_stats=cluster_stats,
+                n_seeds=n_meta_seeds,
+                rank_depth=rank_depth,
+                weights=config.metapolicy.weights,
+            )
+
+        seeds = select_seeds(
+            policy_name=config.metapolicy.name,
+            selected_clusters=decision.selected_clusters,
+            cluster_stats=cluster_stats,
+            cluster_centers=centers,
+            method=config.seed_selection.method,
+            random_state=config.random_seed,
+        )
+        policy_seeds[config.metapolicy.name] = seeds
+        policy_dir = write_policy_outputs(
+            "metapolicy",
+            seeds,
+            cluster_stats,
+            output_dir,
+            include_cluster_metadata=True,
+        )
+        write_metapolicy_votes(decision.vote_rows, policy_dir)
+        if (
+            config.write_pdbs
+            and trajectory_map is not None
+            and config.topology is not None
+        ):
+            write_seed_pdbs(seeds, config.topology, trajectory_map, policy_dir)
+
+        logger.info(
+            "Metapolicy %s selected %d seeds",
+            config.metapolicy.name,
+            len(seeds),
+        )
+
     if len(policy_seeds) > 1:
         write_combined_metadata(policy_seeds, output_dir)
 
@@ -280,7 +412,17 @@ def validate_config(config_path: str | Path) -> RunConfig:
             config.topology, trajectory_map, expected_counts
         )
 
-    for policy_name in config.policies:
+    execution_policies = list(config.policies)
+    if config.metapolicy.enabled:
+        execution_policies.extend(config.metapolicy.policies)
+        if config.metapolicy.name in execution_policies:
+            raise ValueError(
+                f"metapolicy.name '{config.metapolicy.name}' conflicts with a "
+                "base policy name."
+            )
+    execution_policies = _unique_policies(execution_policies)
+
+    for policy_name in execution_policies:
         get_policy(
             policy_name,
             **build_policy_kwargs(

@@ -203,6 +203,35 @@ def write_combined_metadata(
     return path
 
 
+def write_metapolicy_votes(
+    vote_rows: List[Dict[str, Any]],
+    output_dir: Path,
+) -> Path:
+    """Write cluster-level metapolicy vote audit data to ``votes.csv``."""
+    path = ensure_dir(output_dir) / "votes.csv"
+    base_fields = [
+        "cluster_id",
+        "selected",
+        "vote_count",
+        "ensemble_score",
+        "population",
+    ]
+    extra_fields = sorted(
+        {
+            field
+            for row in vote_rows
+            for field in row
+            if field not in base_fields
+        }
+    )
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=[*base_fields, *extra_fields])
+        writer.writeheader()
+        for row in vote_rows:
+            writer.writerow(row)
+    return path
+
+
 def write_fast_scores(
     scores: Dict[int, Dict[str, float]],
     output_dir: Path,

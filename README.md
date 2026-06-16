@@ -106,6 +106,9 @@ MA-REAP requires mapping each trajectory to an agent. MaxEnt VAMPNet requires th
 [Policies guide](https://hnadeem2.github.io/AdaptivePy/policies/) and
 [Configuration](https://hnadeem2.github.io/AdaptivePy/configuration/).
 
+AdaptivePy also supports opt-in metapolicy ensembles with majority polling or
+per-policy seed allocation through the `metapolicy` YAML block.
+
 ## Documentation
 
 | Guide | Description |

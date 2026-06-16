@@ -214,8 +214,47 @@ results/
 ├── maxent_vampnet/
 │   ├── seeds.csv
 │   └── scores.csv
+├── metapolicy/
+│   ├── seeds.csv
+│   ├── metadata.csv
+│   └── votes.csv
 └── combined_metadata.csv
 ```
+
+## Metapolicy ensembles
+
+Metapolicies are opt-in ensembles over cluster-level rankings from multiple
+policies. They do not replace individual policy outputs; they add a final
+ensemble seed set under `metapolicy/`.
+
+```yaml
+metapolicy:
+  enabled: true
+  name: ensemble
+  strategy: majority_polling
+  policies: [least_counts, random, fast]
+  n_seeds: 10
+```
+
+`majority_polling` selects clusters by policy vote count, weighted rank score,
+smaller cluster population, then cluster ID. `allocation` uses fixed per-policy
+quotas:
+
+```yaml
+metapolicy:
+  enabled: true
+  strategy: allocation
+  policies: [least_counts, random, fast, knn_as]
+  allocations:
+    least_counts: 3
+    random: 2
+    fast: 3
+    knn_as: 2
+```
+
+When MaxEnt VAMPNet participates in an ensemble, AdaptivePy clusters the dataset
+and converts MaxEnt frame entropy to a cluster ranking by taking the maximum
+entropy among frames in each cluster.
 
 ## Listing available policies
 

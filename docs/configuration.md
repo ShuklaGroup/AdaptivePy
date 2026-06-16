@@ -51,6 +51,7 @@ write_pdbs: true
 | `clustering.params` | no | `{}` | Extra arguments passed to the clusterer |
 | `policies` | no | `[least_counts]` | List of policy names to evaluate |
 | `policy_params` | no | `{}` | Per-policy settings (see below) |
+| `metapolicy` | no | disabled | Optional ensemble over multiple policies |
 | `n_seeds` | no | `10` | Seeds selected per policy |
 | `seed_selection.method` | no | `nearest_center` | `nearest_center` or `random_frame` |
 | `random_seed` | no | `42` | Global random seed |
@@ -143,6 +144,46 @@ Requires `pip install -e ".[maxent]"`.
 
 Each trajectory must contain more frames than `lagtime`. When `maxent_vampnet`
 is the only configured policy, clustering is skipped.
+
+## Metapolicy ensembles
+
+Set `metapolicy.enabled: true` to combine policy rankings into one final seed set
+written under `output_dir/metapolicy/`. Individual policy outputs are still
+written as usual.
+
+Majority polling ranks clusters by vote count, weighted rank score, smaller
+population, then cluster ID:
+
+```yaml
+metapolicy:
+  enabled: true
+  name: ensemble
+  strategy: majority_polling
+  policies: [least_counts, random, fast]
+  n_seeds: 10
+  rank_depth: 10
+  weights:
+    fast: 2.0
+```
+
+Allocation takes a fixed number of seeds from each policy ranking and skips
+duplicates by continuing down that policy's ranking:
+
+```yaml
+metapolicy:
+  enabled: true
+  strategy: allocation
+  policies: [least_counts, random, fast, knn_as]
+  allocations:
+    least_counts: 3
+    random: 2
+    fast: 3
+    knn_as: 2
+```
+
+If `maxent_vampnet` participates in a metapolicy, clustering is forced so MaxEnt
+frame entropy can be aggregated to clusters. The cluster score is the maximum
+entropy among frames assigned to that cluster.
 
 ## Clustering methods
 

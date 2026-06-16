@@ -105,6 +105,20 @@ with per-frame entropy and softmax probabilities:
 
 Frame-level MaxEnt runs do not write per-policy `metadata.csv`.
 
+### Metapolicy outputs
+
+When `metapolicy.enabled: true`, AdaptivePy writes the final ensemble seed set
+under `metapolicy/`:
+
+| File | Description |
+|------|-------------|
+| `seeds.csv` | Final ensemble seeds; the `policy` column uses `metapolicy.name` |
+| `metadata.csv` | Cluster populations for the clustered ensemble candidates |
+| `votes.csv` | Cluster-level audit table with selection status, vote count, ensemble score, per-policy ranks, and per-policy scores |
+
+Metapolicy output is cluster-level. If MaxEnt VAMPNet is included, its frame
+entropy is aggregated to clusters before voting or allocation.
+
 ## PDB export
 
 When `trajectories_dir`, `topology`, and `write_pdbs: true` are set, selected seed

@@ -19,6 +19,12 @@ from adaptivepy.config.schema import (
     validate_maxent_vampnet_policy_params,
 )
 from adaptivepy.io.loader import load_feature_array, load_features
+from adaptivepy.metapolicies import (
+    PolicyClusterRanking,
+    allocation,
+    majority_polling,
+    maxent_cluster_ranking,
+)
 from adaptivepy.models import Dataset, FrameRecord
 from adaptivepy.policies import list_policies
 from adaptivepy.policies.fast import FastPolicy, compute_fast_rewards, feature_scale
@@ -313,6 +319,87 @@ policy_params:
     assert config.policy_params["fast"]["alpha"] == 0.5
 
 
+def test_load_config_metapolicy_majority_polling(
+    tmp_path: Path,
+    synthetic_features: Path,
+) -> None:
+    """Metapolicy majority polling settings are parsed."""
+    config_path = tmp_path / "config_meta.yaml"
+    config_path.write_text(
+        f"""
+features_dir: {synthetic_features}
+output_dir: {tmp_path / "out"}
+policies:
+  - least_counts
+metapolicy:
+  enabled: true
+  name: ensemble
+  strategy: majority_polling
+  policies: [least_counts, random]
+  n_seeds: 3
+  rank_depth: 4
+  weights:
+    least_counts: 2.0
+""",
+        encoding="utf-8",
+    )
+    config = load_config(config_path)
+    assert config.metapolicy.enabled
+    assert config.metapolicy.name == "ensemble"
+    assert config.metapolicy.policies == ["least_counts", "random"]
+    assert config.metapolicy.weights["least_counts"] == 2.0
+
+
+def test_load_config_metapolicy_allocation(
+    tmp_path: Path,
+    synthetic_features: Path,
+) -> None:
+    """Metapolicy allocation settings require matching quotas."""
+    config_path = tmp_path / "config_meta_alloc.yaml"
+    config_path.write_text(
+        f"""
+features_dir: {synthetic_features}
+output_dir: {tmp_path / "out"}
+n_seeds: 4
+metapolicy:
+  enabled: true
+  strategy: allocation
+  policies: [least_counts, random]
+  allocations:
+    least_counts: 2
+    random: 2
+""",
+        encoding="utf-8",
+    )
+    config = load_config(config_path)
+    assert config.metapolicy.allocations == {"least_counts": 2, "random": 2}
+
+
+def test_load_config_metapolicy_allocation_sum_mismatch(
+    tmp_path: Path,
+    synthetic_features: Path,
+) -> None:
+    """Allocation quotas must sum to the metapolicy seed count."""
+    config_path = tmp_path / "config_meta_bad_alloc.yaml"
+    config_path.write_text(
+        f"""
+features_dir: {synthetic_features}
+output_dir: {tmp_path / "out"}
+n_seeds: 4
+metapolicy:
+  enabled: true
+  strategy: allocation
+  policies: [least_counts, random]
+  allocations:
+    least_counts: 1
+    random: 1
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="allocation sum"):
+        load_config(config_path)
+
+
 def test_build_policy_kwargs_fast(tmp_path: Path, synthetic_features: Path) -> None:
     """build_policy_kwargs validates FAST settings against feature dimension."""
     config = RunConfig(
@@ -456,6 +543,92 @@ write_pdbs: false
     assert (output_dir / "least_counts" / "seeds.csv").is_file()
     assert (output_dir / "random" / "seeds.csv").is_file()
     assert (output_dir / "combined_metadata.csv").is_file()
+
+
+def test_run_adaptive_sampling_with_majority_metapolicy(
+    tmp_path: Path,
+    synthetic_features: Path,
+) -> None:
+    """Metapolicy majority polling writes ensemble seeds and votes."""
+    output_dir = tmp_path / "results_meta"
+    config_path = tmp_path / "config_meta.yaml"
+    config_path.write_text(
+        f"""
+features_dir: {synthetic_features}
+output_dir: {output_dir}
+clustering:
+  method: kmeans
+  n_clusters: 4
+policies:
+  - least_counts
+  - random
+n_seeds: 2
+random_seed: 7
+write_pdbs: false
+metapolicy:
+  enabled: true
+  name: ensemble
+  strategy: majority_polling
+  policies: [least_counts, random]
+  n_seeds: 2
+""",
+        encoding="utf-8",
+    )
+
+    results = run_adaptive_sampling(config_path)
+    assert "ensemble" in results
+    assert len(results["ensemble"]) == 2
+    assert (output_dir / "metapolicy" / "seeds.csv").is_file()
+    assert (output_dir / "metapolicy" / "votes.csv").is_file()
+    assert "rank_least_counts" in (output_dir / "metapolicy" / "votes.csv").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_run_adaptive_sampling_with_allocation_metapolicy(
+    tmp_path: Path,
+    synthetic_features: Path,
+) -> None:
+    """Metapolicy allocation writes the requested final seed count."""
+    output_dir = tmp_path / "results_meta_alloc"
+    config_path = tmp_path / "config_meta_alloc.yaml"
+    config_path.write_text(
+        f"""
+features_dir: {synthetic_features}
+output_dir: {output_dir}
+clustering:
+  method: kmeans
+  n_clusters: 6
+policies:
+  - least_counts
+  - random
+  - fast
+  - knn_as
+policy_params:
+  fast:
+    feature_indices: [0]
+  knn_as:
+    k: 3
+n_seeds: 4
+random_seed: 7
+write_pdbs: false
+metapolicy:
+  enabled: true
+  strategy: allocation
+  policies: [least_counts, random, fast, knn_as]
+  allocations:
+    least_counts: 1
+    random: 1
+    fast: 1
+    knn_as: 1
+""",
+        encoding="utf-8",
+    )
+
+    results = run_adaptive_sampling(config_path)
+    assert "metapolicy" in results
+    assert len(results["metapolicy"]) == 4
+    assert (output_dir / "metapolicy" / "votes.csv").is_file()
 
 
 def test_load_pkl_features(tmp_path: Path) -> None:
@@ -690,6 +863,102 @@ def _make_dataset(
     )
 
 
+def test_majority_polling_prefers_vote_count_before_score() -> None:
+    """Consensus vote count outranks a high single-policy score."""
+    cluster_stats = _make_cluster_stats(
+        {0: [[0.0]], 1: [[1.0]], 2: [[2.0]]}
+    )
+    rankings = [
+        PolicyClusterRanking("a", [0, 1], {0: 2.0, 1: 1.0}),
+        PolicyClusterRanking("b", [2, 1], {2: 2.0, 1: 1.0}),
+    ]
+    decision = majority_polling(rankings, cluster_stats, n_seeds=1, rank_depth=2)
+    assert decision.selected_clusters == [1]
+
+
+def test_majority_polling_weights_affect_score() -> None:
+    """Policy weights affect rank-score ordering when vote counts tie."""
+    cluster_stats = _make_cluster_stats({0: [[0.0]], 1: [[1.0]]})
+    rankings = [
+        PolicyClusterRanking("a", [0, 1], {0: 2.0, 1: 1.0}),
+        PolicyClusterRanking("b", [1, 0], {1: 2.0, 0: 1.0}),
+    ]
+    decision = majority_polling(
+        rankings,
+        cluster_stats,
+        n_seeds=1,
+        rank_depth=2,
+        weights={"a": 3.0, "b": 1.0},
+    )
+    assert decision.selected_clusters == [0]
+
+
+def test_allocation_fills_quotas_and_skips_duplicates() -> None:
+    """Allocation continues down each ranking when clusters duplicate."""
+    cluster_stats = _make_cluster_stats(
+        {0: [[0.0]], 1: [[1.0]], 2: [[2.0]], 3: [[3.0]]}
+    )
+    rankings = [
+        PolicyClusterRanking("a", [0, 1, 2], {}),
+        PolicyClusterRanking("b", [0, 2, 3], {}),
+    ]
+    decision = allocation(
+        rankings,
+        cluster_stats,
+        allocations={"a": 2, "b": 2},
+        n_seeds=4,
+        rank_depth=4,
+    )
+    assert decision.selected_clusters == [0, 1, 2, 3]
+
+
+def test_allocation_fallback_fills_remaining_clusters() -> None:
+    """Allocation uses consensus fallback when rankings cannot fill quotas."""
+    cluster_stats = _make_cluster_stats(
+        {0: [[0.0]], 1: [[1.0]], 2: [[2.0]]}
+    )
+    rankings = [
+        PolicyClusterRanking("a", [0], {}),
+        PolicyClusterRanking("b", [0, 1, 2], {}),
+    ]
+    decision = allocation(
+        rankings,
+        cluster_stats,
+        allocations={"a": 2, "b": 1},
+        n_seeds=3,
+        rank_depth=3,
+    )
+    assert decision.selected_clusters == [0, 1, 2]
+
+
+def test_maxent_cluster_ranking_uses_max_entropy_per_cluster() -> None:
+    """MaxEnt metapolicy ranking aggregates frame entropy by cluster maximum."""
+    dataset = _make_dataset({0: 4}, n_features=2)
+    for frame, cluster_id in zip(dataset.frames, [0, 0, 1, 1]):
+        frame.cluster_id = cluster_id
+    cluster_stats = {
+        0: {
+            "population": 2,
+            "frames": [dataset.frames[0], dataset.frames[1]],
+        },
+        1: {
+            "population": 2,
+            "frames": [dataset.frames[2], dataset.frames[3]],
+        },
+    }
+    scores = {
+        0: {"entropy": 0.1},
+        1: {"entropy": 0.3},
+        2: {"entropy": 0.2},
+        3: {"entropy": 0.9},
+    }
+    ranking = maxent_cluster_ranking(
+        "maxent_vampnet", scores, dataset, cluster_stats, rank_depth=2
+    )
+    assert ranking.ranked_clusters == [1, 0]
+    assert ranking.scores[1] == pytest.approx(0.9)
+
+
 class _FakeMaxEntEstimator:
     """Deterministic softmax probabilities for MaxEnt policy tests."""
 
@@ -908,3 +1177,68 @@ policy_params:
     )
     config = validate_config(config_path)
     assert "maxent_vampnet" in config.policies
+
+
+def test_validate_config_rejects_unknown_metapolicy_policy(
+    tmp_path: Path,
+    synthetic_features: Path,
+) -> None:
+    """validate_config rejects unknown policies referenced by metapolicy."""
+    config_path = tmp_path / "config_bad_meta_policy.yaml"
+    config_path.write_text(
+        f"""
+features_dir: {synthetic_features}
+output_dir: {tmp_path / "out"}
+metapolicy:
+  enabled: true
+  policies: [not_a_policy]
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="Unknown policy"):
+        validate_config(config_path)
+
+
+def test_run_adaptive_sampling_maxent_metapolicy_forces_clustering(
+    tmp_path: Path,
+    synthetic_features: Path,
+) -> None:
+    """MaxEnt metapolicy runs clustering so entropy can be compared by cluster."""
+    pytest.importorskip("deeptime")
+    pytest.importorskip("torch")
+
+    output_dir = tmp_path / "results_maxent_meta"
+    config_path = tmp_path / "config_maxent_meta.yaml"
+    config_path.write_text(
+        f"""
+features_dir: {synthetic_features}
+output_dir: {output_dir}
+clustering:
+  method: kmeans
+  n_clusters: 3
+policies:
+  - maxent_vampnet
+policy_params:
+  maxent_vampnet:
+    output_states: 4
+    lagtime: 1
+    hidden_layers: [8, 4]
+    batch_size: 16
+    epochs: 1
+n_seeds: 2
+random_seed: 7
+write_pdbs: false
+metapolicy:
+  enabled: true
+  policies: [maxent_vampnet]
+  n_seeds: 2
+""",
+        encoding="utf-8",
+    )
+
+    results = run_adaptive_sampling(config_path)
+    assert "metapolicy" in results
+    assert len(results["metapolicy"]) == 2
+    assert (output_dir / "assignments.npy").is_file()
+    assert (output_dir / "maxent_vampnet" / "scores.csv").is_file()
+    assert (output_dir / "metapolicy" / "votes.csv").is_file()

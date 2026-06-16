@@ -50,6 +50,20 @@ class SeedSelectionConfig:
 
 
 @dataclass
+class MetapolicyConfig:
+    """Optional ensemble policy configuration."""
+
+    enabled: bool = False
+    name: str = "metapolicy"
+    strategy: str = "majority_polling"
+    policies: List[str] = field(default_factory=list)
+    n_seeds: Optional[int] = None
+    rank_depth: Optional[int] = None
+    weights: Dict[str, float] = field(default_factory=dict)
+    allocations: Dict[str, int] = field(default_factory=dict)
+
+
+@dataclass
 class RunConfig:
     """Full configuration for an adaptive sampling run.
 
@@ -88,6 +102,7 @@ class RunConfig:
     random_seed: int = DEFAULT_RANDOM_SEED
     write_pdbs: bool = True
     policy_params: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    metapolicy: MetapolicyConfig = field(default_factory=MetapolicyConfig)
 
 
 def _parse_policy_params(raw: Any) -> Dict[str, Dict[str, Any]]:
@@ -97,6 +112,96 @@ def _parse_policy_params(raw: Any) -> Dict[str, Dict[str, Any]]:
     if not isinstance(raw, dict):
         raise ValueError("'policy_params' must be a mapping of policy names to settings.")
     return {str(name): dict(params or {}) for name, params in raw.items()}
+
+
+def _parse_policy_list(raw: Any, field_name: str) -> List[str]:
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, (list, tuple)) or not raw:
+        raise ValueError(f"'{field_name}' must be a non-empty policy list.")
+    return [str(policy) for policy in raw]
+
+
+def _parse_metapolicy(
+    raw: Any,
+    default_policies: List[str],
+    default_n_seeds: int,
+) -> MetapolicyConfig:
+    """Parse and validate the optional metapolicy block."""
+    if raw is None:
+        return MetapolicyConfig()
+    if not isinstance(raw, dict):
+        raise ValueError("'metapolicy' must be a mapping.")
+
+    enabled = bool(raw.get("enabled", True))
+    if not enabled:
+        return MetapolicyConfig(enabled=False)
+
+    strategy = str(raw.get("strategy", "majority_polling"))
+    if strategy not in {"majority_polling", "allocation"}:
+        raise ValueError(
+            "metapolicy.strategy must be 'majority_polling' or 'allocation'."
+        )
+
+    policies = _parse_policy_list(
+        raw.get("policies", default_policies), "metapolicy.policies"
+    )
+    n_seeds = int(raw.get("n_seeds", default_n_seeds))
+    if n_seeds < 1:
+        raise ValueError("metapolicy.n_seeds must be >= 1.")
+
+    rank_depth = raw.get("rank_depth")
+    if rank_depth is not None:
+        rank_depth = int(rank_depth)
+        if rank_depth < 1:
+            raise ValueError("metapolicy.rank_depth must be >= 1.")
+
+    weights_raw = raw.get("weights", {})
+    if weights_raw is None:
+        weights_raw = {}
+    if not isinstance(weights_raw, dict):
+        raise ValueError("metapolicy.weights must map policy names to weights.")
+    weights = {str(name): float(value) for name, value in weights_raw.items()}
+    if any(value < 0 for value in weights.values()):
+        raise ValueError("metapolicy.weights must be non-negative.")
+
+    allocations: Dict[str, int] = {}
+    if strategy == "allocation":
+        allocations_raw = raw.get("allocations")
+        if not isinstance(allocations_raw, dict):
+            raise ValueError(
+                "metapolicy.allocations must map every policy to a positive integer."
+            )
+        missing = set(policies) - set(str(name) for name in allocations_raw)
+        extra = set(str(name) for name in allocations_raw) - set(policies)
+        if missing:
+            raise ValueError(
+                f"metapolicy.allocations missing policies: {sorted(missing)}"
+            )
+        if extra:
+            raise ValueError(
+                f"metapolicy.allocations contains unknown policies: {sorted(extra)}"
+            )
+        allocations = {
+            str(name): int(value) for name, value in allocations_raw.items()
+        }
+        if any(value < 1 for value in allocations.values()):
+            raise ValueError("metapolicy.allocations must be positive integers.")
+        if sum(allocations.values()) != n_seeds:
+            raise ValueError(
+                "metapolicy allocation sum must equal metapolicy.n_seeds."
+            )
+
+    return MetapolicyConfig(
+        enabled=True,
+        name=str(raw.get("name", "metapolicy")),
+        strategy=strategy,
+        policies=policies,
+        n_seeds=n_seeds,
+        rank_depth=rank_depth,
+        weights=weights,
+        allocations=allocations,
+    )
 
 
 def validate_fast_policy_params(
@@ -567,11 +672,11 @@ def load_config(path: str | Path) -> RunConfig:
         method=seed_raw.get("method", DEFAULT_SEED_SELECTION),
     )
 
-    policies = raw.get("policies", ["least_counts"])
-    if isinstance(policies, str):
-        policies = [policies]
+    policies = _parse_policy_list(raw.get("policies", ["least_counts"]), "policies")
 
     policy_params = _parse_policy_params(raw.get("policy_params"))
+    n_seeds = int(raw.get("n_seeds", DEFAULT_N_SEEDS))
+    metapolicy = _parse_metapolicy(raw.get("metapolicy"), policies, n_seeds)
 
     return RunConfig(
         features_dir=features_dir,
@@ -580,11 +685,12 @@ def load_config(path: str | Path) -> RunConfig:
         topology=topology,
         clustering=clustering,
         policies=policies,
-        n_seeds=int(raw.get("n_seeds", DEFAULT_N_SEEDS)),
+        n_seeds=n_seeds,
         seed_selection=seed_selection,
         random_seed=int(raw.get("random_seed", DEFAULT_RANDOM_SEED)),
         write_pdbs=bool(raw.get("write_pdbs", True)),
         policy_params=policy_params,
+        metapolicy=metapolicy,
     )
 
 
@@ -621,4 +727,19 @@ def config_to_dict(config: RunConfig) -> Dict[str, Any]:
         result["topology"] = str(config.topology)
     if config.policy_params:
         result["policy_params"] = config.policy_params
+    if config.metapolicy.enabled:
+        metapolicy: Dict[str, Any] = {
+            "enabled": True,
+            "name": config.metapolicy.name,
+            "strategy": config.metapolicy.strategy,
+            "policies": list(config.metapolicy.policies),
+            "n_seeds": config.metapolicy.n_seeds,
+        }
+        if config.metapolicy.rank_depth is not None:
+            metapolicy["rank_depth"] = config.metapolicy.rank_depth
+        if config.metapolicy.weights:
+            metapolicy["weights"] = config.metapolicy.weights
+        if config.metapolicy.allocations:
+            metapolicy["allocations"] = config.metapolicy.allocations
+        result["metapolicy"] = metapolicy
     return result
