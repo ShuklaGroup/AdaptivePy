@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Dict, List, Type
 
+from adaptivepy.models import Dataset, SeedResult
 from adaptivepy.stats.cluster_stats import ClusterStats
 
 POLICY_REGISTRY: Dict[str, Type["Policy"]] = {}
@@ -37,13 +38,15 @@ def register_policy(cls: Type["Policy"]) -> Type["Policy"]:
 
 
 class Policy(ABC):
-    """Base class for cluster selection policies.
+    """Base class for adaptive sampling policies.
 
-    Subclasses implement :meth:`select_clusters` to choose which clusters
-    should contribute seed frames.
+    Cluster-based policies implement :meth:`select_clusters` and set
+    ``requires_clustering = True``. Frame-level policies set
+    ``requires_clustering = False`` and implement :meth:`select_frames`.
     """
 
     name: str = ""
+    requires_clustering: bool = True
 
     @abstractmethod
     def select_clusters(
@@ -66,6 +69,51 @@ class Policy(ABC):
             Selected cluster IDs.
         """
         ...
+
+    def select_frames(
+        self,
+        dataset: Dataset,
+        n_seeds: int,
+    ) -> List[SeedResult]:
+        """Select seed frames directly from loaded features.
+
+        Frame-level policies override this method. Cluster-based policies
+        raise :exc:`NotImplementedError`.
+
+        Parameters
+        ----------
+        dataset : Dataset
+            Loaded feature dataset.
+        n_seeds : int
+            Number of seed frames to select.
+
+        Returns
+        -------
+        list of SeedResult
+            Selected seed frames.
+        """
+        raise NotImplementedError(
+            f"Policy '{self.name}' does not support direct frame selection."
+        )
+
+
+def policy_requires_clustering(name: str) -> bool:
+    """Return whether a registered policy needs clustering.
+
+    Parameters
+    ----------
+    name : str
+        Registered policy name.
+
+    Returns
+    -------
+    bool
+        ``True`` when the policy consumes cluster statistics.
+    """
+    if name not in POLICY_REGISTRY:
+        available = ", ".join(sorted(POLICY_REGISTRY))
+        raise ValueError(f"Unknown policy '{name}'. Available: {available}")
+    return bool(getattr(POLICY_REGISTRY[name], "requires_clustering", True))
 
 
 def get_policy(name: str, **kwargs) -> Policy:

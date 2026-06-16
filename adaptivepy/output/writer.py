@@ -146,7 +146,9 @@ def write_seeds_csv(seeds: Iterable[SeedResult], output_dir: Path) -> Path:
                     "policy": seed.policy,
                     "traj_id": seed.traj_id,
                     "frame_id": seed.frame_id,
-                    "cluster_id": seed.cluster_id,
+                    "cluster_id": (
+                        "" if seed.cluster_id is None else seed.cluster_id
+                    ),
                     "global_index": seed.global_index,
                 }
             )
@@ -191,7 +193,9 @@ def write_combined_metadata(
                         "policy": seed.policy,
                         "traj_id": seed.traj_id,
                         "frame_id": seed.frame_id,
-                        "cluster_id": seed.cluster_id,
+                        "cluster_id": (
+                            "" if seed.cluster_id is None else seed.cluster_id
+                        ),
                         "global_index": seed.global_index,
                     }
                 )
@@ -263,6 +267,54 @@ def write_knn_as_scores(
                     "effective_k": int(row["effective_k"]),
                 }
             )
+    return path
+
+
+def write_maxent_vampnet_scores(
+    scores: Dict[int, Dict[str, Any]],
+    output_dir: Path,
+) -> Path:
+    """Write MaxEnt VAMPNet per-frame entropy scores to ``scores.csv``."""
+    path = ensure_dir(output_dir) / "scores.csv"
+    if not scores:
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=[
+                    "global_index",
+                    "traj_id",
+                    "frame_id",
+                    "entropy",
+                    "selected",
+                ],
+            )
+            writer.writeheader()
+        return path
+
+    n_states = len(next(iter(scores.values()))["probabilities"])
+    fieldnames = [
+        "global_index",
+        "traj_id",
+        "frame_id",
+        "entropy",
+        "selected",
+        *[f"prob_{state_idx}" for state_idx in range(n_states)],
+    ]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for global_index in sorted(scores):
+            row = scores[global_index]
+            output_row: Dict[str, Any] = {
+                "global_index": global_index,
+                "traj_id": row["traj_id"],
+                "frame_id": row["frame_id"],
+                "entropy": row["entropy"],
+                "selected": bool(row["selected"]),
+            }
+            for state_idx, prob in enumerate(row["probabilities"]):
+                output_row[f"prob_{state_idx}"] = prob
+            writer.writerow(output_row)
     return path
 
 
@@ -338,6 +390,7 @@ def write_policy_outputs(
     seeds: List[SeedResult],
     cluster_stats: ClusterStats,
     results_dir: Path,
+    include_cluster_metadata: bool = True,
 ) -> Path:
     """Write all outputs for a single policy into its subdirectory.
 
@@ -348,9 +401,12 @@ def write_policy_outputs(
     seeds : list of SeedResult
         Seeds selected by the policy.
     cluster_stats : dict
-        Global cluster statistics (same for all policies).
+        Global cluster statistics (same for all policies). Ignored when
+        ``include_cluster_metadata`` is ``False``.
     results_dir : Path
         Top-level results directory.
+    include_cluster_metadata : bool
+        Whether to write per-policy cluster ``metadata.csv``.
 
     Returns
     -------
@@ -359,5 +415,6 @@ def write_policy_outputs(
     """
     policy_dir = ensure_dir(results_dir / policy_name)
     write_seeds_csv(seeds, policy_dir)
-    write_cluster_statistics(cluster_stats, policy_dir)
+    if include_cluster_metadata and cluster_stats:
+        write_cluster_statistics(cluster_stats, policy_dir)
     return policy_dir

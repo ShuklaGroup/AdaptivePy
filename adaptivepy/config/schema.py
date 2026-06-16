@@ -356,6 +356,94 @@ def validate_knn_as_policy_params(params: Dict[str, Any]) -> Dict[str, Any]:
     return {"k": k, "scoring": scoring}
 
 
+def validate_maxent_vampnet_policy_params(
+    params: Dict[str, Any],
+    n_features: int,
+    traj_index_map: Optional[Dict[int, tuple[int, int]]] = None,
+) -> Dict[str, Any]:
+    """Validate and normalize MaxEnt VAMPNet policy parameters.
+
+    Parameters
+    ----------
+    params : dict
+        Raw MaxEnt VAMPNet settings from configuration.
+    n_features : int
+        Number of feature dimensions in the loaded dataset.
+    traj_index_map : dict or None
+        Mapping from trajectory ID to ``(start, end)`` indices in the
+        concatenated feature matrix.
+
+    Returns
+    -------
+    dict
+        Normalized keyword arguments for :class:`MaxEntVampNetPolicy`.
+    """
+    output_states = params.get("output_states")
+    if output_states is None:
+        output_states = n_features
+    output_states = int(output_states)
+    if output_states < 2:
+        raise ValueError("MaxEnt VAMPNet 'output_states' must be >= 2.")
+
+    lagtime = int(params.get("lagtime", 1))
+    if lagtime < 1:
+        raise ValueError("MaxEnt VAMPNet 'lagtime' must be >= 1.")
+
+    if traj_index_map:
+        for traj_id, (start, end) in sorted(traj_index_map.items()):
+            n_frames = end - start
+            if n_frames <= lagtime:
+                raise ValueError(
+                    f"Trajectory {traj_id} has {n_frames} frames, but lagtime "
+                    f"requires at least {lagtime + 1} frames."
+                )
+
+    hidden_layers = params.get("hidden_layers")
+    if hidden_layers is not None:
+        if not isinstance(hidden_layers, (list, tuple)) or not hidden_layers:
+            raise ValueError(
+                "MaxEnt VAMPNet 'hidden_layers' must be a non-empty list of integers."
+            )
+        normalized_layers = [int(width) for width in hidden_layers]
+        if any(width < 1 for width in normalized_layers):
+            raise ValueError(
+                "MaxEnt VAMPNet 'hidden_layers' must contain positive integers."
+            )
+    else:
+        normalized_layers = None
+
+    learning_rate = float(params.get("learning_rate", 1e-4))
+    if learning_rate <= 0:
+        raise ValueError("MaxEnt VAMPNet 'learning_rate' must be positive.")
+
+    batch_size = int(params.get("batch_size", 2048))
+    if batch_size < 1:
+        raise ValueError("MaxEnt VAMPNet 'batch_size' must be >= 1.")
+
+    epochs = int(params.get("epochs", 100))
+    if epochs < 1:
+        raise ValueError("MaxEnt VAMPNet 'epochs' must be >= 1.")
+
+    device = str(params.get("device", "cpu"))
+    num_threads = int(params.get("num_threads", 1))
+    if num_threads < 1:
+        raise ValueError("MaxEnt VAMPNet 'num_threads' must be >= 1.")
+
+    kwargs: Dict[str, Any] = {
+        "n_features": n_features,
+        "output_states": output_states,
+        "lagtime": lagtime,
+        "learning_rate": learning_rate,
+        "batch_size": batch_size,
+        "epochs": epochs,
+        "device": device,
+        "num_threads": num_threads,
+    }
+    if normalized_layers is not None:
+        kwargs["hidden_layers"] = normalized_layers
+    return kwargs
+
+
 def build_policy_kwargs(
     policy_name: str,
     config: RunConfig,
@@ -363,6 +451,7 @@ def build_policy_kwargs(
     traj_names: Optional[Sequence[str]] = None,
     n_clusters: Optional[int] = None,
     n_seeds: Optional[int] = None,
+    traj_index_map: Optional[Dict[int, tuple[int, int]]] = None,
 ) -> Dict[str, Any]:
     """Build constructor keyword arguments for a configured policy.
 
@@ -406,6 +495,18 @@ def build_policy_kwargs(
         )
     elif policy_name == "knn_as":
         kwargs.update(validate_knn_as_policy_params(params))
+    elif policy_name == "maxent_vampnet":
+        if n_features is None:
+            raise ValueError(
+                "MaxEnt VAMPNet policy validation requires feature dimensionality."
+            )
+        kwargs.update(
+            validate_maxent_vampnet_policy_params(
+                params,
+                n_features=n_features,
+                traj_index_map=traj_index_map,
+            )
+        )
 
     return kwargs
 

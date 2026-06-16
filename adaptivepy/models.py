@@ -69,8 +69,9 @@ class SeedResult:
         Source trajectory index.
     frame_id : int
         Frame index within the source trajectory.
-    cluster_id : int
-        Cluster from which the seed was drawn.
+    cluster_id : int or None
+        Cluster from which the seed was drawn, or ``None`` for frame-level
+        policies that do not use clustering.
     global_index : int
         Row index in the concatenated feature matrix.
     """
@@ -79,5 +80,5 @@ class SeedResult:
     policy: str
     traj_id: int
     frame_id: int
-    cluster_id: int
+    cluster_id: Optional[int]
     global_index: int

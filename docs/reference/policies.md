@@ -39,3 +39,11 @@
         - aggregate_agent_scores
         - apply_stakes_method
         - compute_agent_scores
+
+::: adaptivepy.policies.maxent_vampnet
+    options:
+      members:
+        - MaxEntVampNetPolicy
+        - compute_shannon_entropy
+        - rank_frames_by_entropy
+        - split_trajectories_from_dataset

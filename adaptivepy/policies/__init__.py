@@ -5,6 +5,7 @@ from adaptivepy.policies.base import (
     Policy,
     get_policy,
     list_policies,
+    policy_requires_clustering,
     register_policy,
 )
 
@@ -13,6 +14,7 @@ from adaptivepy.policies import fast  # noqa: F401
 from adaptivepy.policies import knn_as  # noqa: F401
 from adaptivepy.policies import least_counts  # noqa: F401
 from adaptivepy.policies import ma_reap  # noqa: F401
+from adaptivepy.policies import maxent_vampnet  # noqa: F401
 from adaptivepy.policies import random  # noqa: F401
 
 __all__ = [
@@ -20,5 +22,6 @@ __all__ = [
     "Policy",
     "get_policy",
     "list_policies",
+    "policy_requires_clustering",
     "register_policy",
 ]

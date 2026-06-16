@@ -31,10 +31,12 @@ from adaptivepy.output.writer import (
     write_fast_scores,
     write_knn_as_scores,
     write_ma_reap_outputs,
+    write_maxent_vampnet_scores,
     write_policy_outputs,
     write_run_config,
 )
 from adaptivepy.policies import get_policy
+from adaptivepy.policies.base import policy_requires_clustering
 from adaptivepy.selection.frame_selector import select_seeds
 from adaptivepy.stats.cluster_stats import assign_clusters, compute_cluster_stats
 from adaptivepy.utils.io_utils import ensure_dir
@@ -111,32 +113,46 @@ def run_adaptive_sampling(
             config.topology, trajectory_map, expected_counts
         )
 
-    # --- Clustering ---
-    clusterer = create_clusterer(
-        method=config.clustering.method,
-        n_clusters=config.clustering.n_clusters,
-        random_state=config.random_seed,
-        params=config.clustering.params,
+    # --- Clustering (optional for frame-level policies) ---
+    needs_clustering = any(
+        policy_requires_clustering(policy_name) for policy_name in config.policies
     )
-    fit_clusterer(clusterer, dataset.feature_matrix)
-    labels = clusterer.predict(dataset.feature_matrix)
-    assign_clusters(dataset, labels)
-
-    cluster_stats = compute_cluster_stats(dataset)
-    centers = clusterer.cluster_centers_
+    cluster_stats = {}
+    centers = None
+    labels = None
     n_features = dataset.feature_matrix.shape[1]
 
-    logger.info(
-        "Clustering complete: %d clusters, %d total frames",
-        len(cluster_stats),
-        len(dataset.frames),
-    )
+    if needs_clustering:
+        clusterer = create_clusterer(
+            method=config.clustering.method,
+            n_clusters=config.clustering.n_clusters,
+            random_state=config.random_seed,
+            params=config.clustering.params,
+        )
+        fit_clusterer(clusterer, dataset.feature_matrix)
+        labels = clusterer.predict(dataset.feature_matrix)
+        assign_clusters(dataset, labels)
+
+        cluster_stats = compute_cluster_stats(dataset)
+        centers = clusterer.cluster_centers_
+
+        logger.info(
+            "Clustering complete: %d clusters, %d total frames",
+            len(cluster_stats),
+            len(dataset.frames),
+        )
+    else:
+        logger.info(
+            "Skipping clustering for frame-level policies (%d total frames)",
+            len(dataset.frames),
+        )
 
     # --- Global artifacts ---
     write_run_config(config, output_dir, config_path)
-    write_assignments(labels, output_dir)
-    write_cluster_model(clusterer.model, output_dir)
-    write_cluster_statistics(cluster_stats, output_dir)
+    if needs_clustering and labels is not None:
+        write_assignments(labels, output_dir)
+        write_cluster_model(clusterer.model, output_dir)
+        write_cluster_statistics(cluster_stats, output_dir)
 
     # --- Policies ---
     policy_seeds: Dict[str, List[SeedResult]] = {}
@@ -148,7 +164,8 @@ def run_adaptive_sampling(
             config,
             n_features=n_features,
             traj_names=dataset.traj_names,
-            n_clusters=len(cluster_stats),
+            n_clusters=len(cluster_stats) if cluster_stats else None,
+            traj_index_map=dataset.traj_index_map,
         )
         if policy_name == "ma_reap":
             policy_kwargs["cluster_centers"] = centers
@@ -156,21 +173,29 @@ def run_adaptive_sampling(
             policy_kwargs["cluster_centers"] = centers
 
         policy = get_policy(policy_name, **policy_kwargs)
-        selected_clusters = policy.select_clusters(
-            cluster_stats, config.n_seeds
-        )
-        seeds = select_seeds(
-            policy_name=policy_name,
-            selected_clusters=selected_clusters,
-            cluster_stats=cluster_stats,
-            cluster_centers=centers,
-            method=config.seed_selection.method,
-            random_state=config.random_seed,
-        )
+        if policy.requires_clustering:
+            selected_clusters = policy.select_clusters(
+                cluster_stats, config.n_seeds
+            )
+            seeds = select_seeds(
+                policy_name=policy_name,
+                selected_clusters=selected_clusters,
+                cluster_stats=cluster_stats,
+                cluster_centers=centers,
+                method=config.seed_selection.method,
+                random_state=config.random_seed,
+            )
+        else:
+            seeds = policy.select_frames(dataset, config.n_seeds)
+
         policy_seeds[policy_name] = seeds
 
         policy_dir = write_policy_outputs(
-            policy_name, seeds, cluster_stats, output_dir
+            policy_name,
+            seeds,
+            cluster_stats,
+            output_dir,
+            include_cluster_metadata=policy.requires_clustering,
         )
 
         if policy_name == "fast" and hasattr(policy, "last_scores"):
@@ -189,6 +214,9 @@ def run_adaptive_sampling(
                 seeds=seeds,
                 output_dir=policy_dir,
             )
+
+        if policy_name == "maxent_vampnet" and hasattr(policy, "last_scores"):
+            write_maxent_vampnet_scores(policy.last_scores, policy_dir)
 
         if (
             config.write_pdbs
@@ -260,6 +288,7 @@ def validate_config(config_path: str | Path) -> RunConfig:
                 config,
                 n_features=n_features,
                 traj_names=dataset.traj_names,
+                traj_index_map=dataset.traj_index_map,
             ),
         )
 

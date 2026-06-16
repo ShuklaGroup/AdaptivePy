@@ -130,6 +130,52 @@ policy_params:
 MA-REAP writes sidecar files: `scores.csv`, `agent_weights.csv`, `stakes.csv`,
 and `executors.csv`. See [Outputs](outputs.md).
 
+### `maxent_vampnet`
+
+Implements **MaxEnt VAMPNet** from Kleiman & Shukla (2023). Unlike cluster-based
+policies, MaxEnt VAMPNet trains a deeptime VAMPNet on lagged trajectory features,
+transforms each frame into softmax metastable-state probabilities, and selects
+the frames with the highest Shannon entropy. **No clustering step is required.**
+
+Install the optional dependencies first:
+
+```bash
+pip install -e ".[maxent]"
+```
+
+Configure via `policy_params`:
+
+```yaml
+policies:
+  - maxent_vampnet
+
+policy_params:
+  maxent_vampnet:
+    output_states: 8
+    lagtime: 10
+    hidden_layers: [16, 32, 64, 128, 256, 128, 64, 32, 16]
+    learning_rate: 1.0e-4
+    batch_size: 2048
+    epochs: 100
+    device: cpu
+    num_threads: 1
+```
+
+| Key | Required | Default | Description |
+|-----|----------|---------|-------------|
+| `output_states` | no | `n_features` | Number of softmax output nodes |
+| `lagtime` | no | `1` | Lag time in frames for VAMPNet training |
+| `hidden_layers` | no | author default | Hidden MLP layer widths |
+| `learning_rate` | no | `1e-4` | VAMPNet learning rate |
+| `batch_size` | no | `2048` | Training batch size |
+| `epochs` | no | `100` | Training epochs per run |
+| `device` | no | `cpu` | PyTorch device (`cpu` or `cuda`) |
+| `num_threads` | no | `1` | CPU threads for PyTorch training |
+
+MaxEnt VAMPNet writes `maxent_vampnet/scores.csv` with per-frame entropy and
+softmax probabilities. When it is the only configured policy, clustering
+artifacts are skipped entirely.
+
 ## Multi-policy runs
 
 Configure multiple policies in YAML:
@@ -165,6 +211,9 @@ results/
 │   ├── agent_weights.csv
 │   ├── stakes.csv
 │   └── executors.csv
+├── maxent_vampnet/
+│   ├── seeds.csv
+│   └── scores.csv
 └── combined_metadata.csv
 ```
 
@@ -177,8 +226,11 @@ adaptivepy list-policies
 ## Extending policies
 
 New policies register automatically via the `POLICY_REGISTRY`. Subclass `Policy`,
-set a unique `name`, implement `select_clusters`, and apply the `@register_policy`
-decorator:
+set a unique `name`, and apply the `@register_policy` decorator.
+
+Cluster-based policies set `requires_clustering = True` (default) and implement
+`select_clusters`. Frame-level policies set `requires_clustering = False` and
+implement `select_frames`:
 
 ```python
 from adaptivepy.policies.base import Policy, register_policy
@@ -191,6 +243,23 @@ class MyPolicy(Policy):
 
     def select_clusters(self, cluster_stats: ClusterStats, n_seeds: int):
         # Return a list of cluster IDs
+        ...
+```
+
+```python
+from adaptivepy.models import Dataset, SeedResult
+from adaptivepy.policies.base import Policy, register_policy
+
+
+@register_policy
+class MyFramePolicy(Policy):
+    name = "my_frame_policy"
+    requires_clustering = False
+
+    def select_clusters(self, cluster_stats, n_seeds):
+        raise NotImplementedError
+
+    def select_frames(self, dataset: Dataset, n_seeds: int) -> list[SeedResult]:
         ...
 ```
 

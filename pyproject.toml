@@ -26,6 +26,10 @@ docs = [
     "mkdocs-material>=9.0",
     "mkdocstrings[python]>=0.24",
 ]
+maxent = [
+    "deeptime>=0.4",
+    "torch>=2.0",
+]
 
 [project.scripts]
 adaptivepy = "adaptivepy.cli.run:main"

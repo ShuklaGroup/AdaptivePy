@@ -14,6 +14,10 @@ downstream analysis.
 | `logs.txt` | Full run log |
 | `combined_metadata.csv` | Seeds from all policies (multi-policy runs only) |
 
+Clustering artifacts (`assignments.npy`, `cluster_model.pkl`, top-level
+`metadata.csv`) are omitted when all configured policies are frame-level, such
+as `maxent_vampnet` alone.
+
 ## Per-policy outputs
 
 Each policy gets a subdirectory named after the policy:
@@ -34,7 +38,7 @@ results/least_counts/
 | `policy` | Policy name |
 | `traj_id` | Source trajectory index |
 | `frame_id` | Frame index within the trajectory |
-| `cluster_id` | Cluster the seed was drawn from |
+| `cluster_id` | Cluster the seed was drawn from (blank for frame-level policies) |
 | `global_index` | Row index in the concatenated feature matrix |
 
 Example:
@@ -84,6 +88,22 @@ seed_id,cluster_id,executor_agent
 MA-REAP requires assigning every feature trajectory to an agent via
 `policy_params.ma_reap.agents`. See [Features](features.md#agent-assignment-for-ma-reap)
 and [Policies](policies.md#ma_reap).
+
+### MaxEnt VAMPNet sidecar files
+
+When using the `maxent_vampnet` policy, `maxent_vampnet/scores.csv` is written
+with per-frame entropy and softmax probabilities:
+
+| Column | Description |
+|--------|-------------|
+| `global_index` | Row index in the concatenated feature matrix |
+| `traj_id` | Source trajectory index |
+| `frame_id` | Frame index within the trajectory |
+| `entropy` | Shannon entropy of softmax state probabilities |
+| `selected` | Whether the frame was chosen as a seed |
+| `prob_0` … `prob_K` | Softmax metastable-state probabilities |
+
+Frame-level MaxEnt runs do not write per-policy `metadata.csv`.
 
 ## PDB export
 

@@ -84,7 +84,14 @@ policy_params:
   knn_as:
     k: 5
     scoring: vectorsum
+  maxent_vampnet:
+    output_states: 8
+    lagtime: 10
+    epochs: 100
 ```
+
+Install MaxEnt dependencies with `pip install -e ".[maxent]"` when using
+`maxent_vampnet`.
 
 ### FAST (`fast`)
 
@@ -118,6 +125,24 @@ agents are required.
 |-----|----------|---------|-------------|
 | `k` | no | `5` | Nearest-neighbor records requested; clamped to available clusters |
 | `scoring` | no | `vectorsum` | `vectorsum` for summed displacement magnitude, or `distance` for mean neighbor distance |
+
+### MaxEnt VAMPNet (`maxent_vampnet`)
+
+Requires `pip install -e ".[maxent]"`.
+
+| Key | Required | Default | Description |
+|-----|----------|---------|-------------|
+| `output_states` | no | `n_features` | Number of softmax output nodes |
+| `lagtime` | no | `1` | Lag time in frames for VAMPNet training |
+| `hidden_layers` | no | author default | Hidden MLP layer widths |
+| `learning_rate` | no | `1e-4` | VAMPNet learning rate |
+| `batch_size` | no | `2048` | Training batch size |
+| `epochs` | no | `100` | Training epochs per run |
+| `device` | no | `cpu` | PyTorch device |
+| `num_threads` | no | `1` | CPU threads for PyTorch |
+
+Each trajectory must contain more frames than `lagtime`. When `maxent_vampnet`
+is the only configured policy, clustering is skipped.
 
 ## Clustering methods
 

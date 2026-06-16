@@ -10,6 +10,12 @@ cd AdaptivePy
 pip install -e ".[dev,docs]"
 ```
 
+For MaxEnt VAMPNet development and tests:
+
+```bash
+pip install -e ".[dev,maxent]"
+```
+
 ## Run tests
 
 ```bash
@@ -74,6 +80,8 @@ Existing examples with `policy_params`:
 - `fast` — feature indices, directions, weights, `alpha`; writes `scores.csv`
 - `ma_reap` — agent-to-trajectory mapping, stakes, `delta`, regime; writes
   sidecar CSVs (`scores.csv`, `agent_weights.csv`, `stakes.csv`, `executors.csv`)
+- `maxent_vampnet` — VAMPNet training hyperparameters; frame-level entropy
+  selection without clustering; writes per-frame `scores.csv`
 
 ## CI workflows
 

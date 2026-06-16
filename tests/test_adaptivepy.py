@@ -16,12 +16,19 @@ from adaptivepy.config.schema import (
     validate_fast_policy_params,
     validate_knn_as_policy_params,
     validate_ma_reap_policy_params,
+    validate_maxent_vampnet_policy_params,
 )
 from adaptivepy.io.loader import load_feature_array, load_features
-from adaptivepy.models import FrameRecord
+from adaptivepy.models import Dataset, FrameRecord
 from adaptivepy.policies import list_policies
 from adaptivepy.policies.fast import FastPolicy, compute_fast_rewards, feature_scale
 from adaptivepy.policies.knn_as import KnnAsPolicy, compute_knn_as_scores
+from adaptivepy.policies.maxent_vampnet import (
+    MaxEntVampNetPolicy,
+    compute_shannon_entropy,
+    rank_frames_by_entropy,
+    split_trajectories_from_dataset,
+)
 from adaptivepy.policies.ma_reap import (
     MaReapPolicy,
     aggregate_agent_scores,
@@ -96,6 +103,7 @@ def test_list_policies() -> None:
     assert "fast" in policies
     assert "ma_reap" in policies
     assert "knn_as" in policies
+    assert "maxent_vampnet" in policies
 
 
 def test_compute_knn_as_scores_vectorsum() -> None:
@@ -648,3 +656,255 @@ write_pdbs: false
     assert (policy_dir / "agent_weights.csv").is_file()
     assert (policy_dir / "stakes.csv").is_file()
     assert (policy_dir / "executors.csv").is_file()
+
+
+def _make_dataset(
+    traj_shapes: dict[int, int],
+    n_features: int = 2,
+) -> Dataset:
+    """Build a synthetic dataset with per-trajectory frame counts."""
+    frames: list[FrameRecord] = []
+    traj_index_map: dict[int, tuple[int, int]] = {}
+    global_index = 0
+    for traj_id, n_frames in sorted(traj_shapes.items()):
+        start = global_index
+        for frame_id in range(n_frames):
+            frames.append(
+                _make_frame(
+                    traj_id,
+                    frame_id,
+                    [float(frame_id), float(traj_id)],
+                    None,
+                    global_index,
+                )
+            )
+            global_index += 1
+        traj_index_map[traj_id] = (start, global_index)
+    feature_matrix = np.stack([frame.features for frame in frames], axis=0)
+    traj_names = [f"traj_{traj_id}" for traj_id in sorted(traj_shapes)]
+    return Dataset(
+        frames=frames,
+        feature_matrix=feature_matrix,
+        traj_index_map=traj_index_map,
+        traj_names=traj_names,
+    )
+
+
+class _FakeMaxEntEstimator:
+    """Deterministic softmax probabilities for MaxEnt policy tests."""
+
+    def transform(self, features: np.ndarray) -> np.ndarray:
+        n_frames = features.shape[0]
+        probabilities = np.zeros((n_frames, 2), dtype=float)
+        for idx in range(n_frames):
+            if idx % 3 == 0:
+                probabilities[idx] = [0.5, 0.5]
+            else:
+                probabilities[idx] = [0.9, 0.1]
+        return probabilities
+
+
+def test_compute_shannon_entropy_uniform_and_peaked() -> None:
+    """Shannon entropy is maximal for uniform softmax probabilities."""
+    probabilities = np.array([[0.5, 0.5], [0.9, 0.1]])
+    entropies = compute_shannon_entropy(probabilities)
+    assert entropies[0] > entropies[1]
+    assert entropies[0] == pytest.approx(np.log(2.0))
+
+
+def test_rank_frames_by_entropy_tie_breaks_by_global_index() -> None:
+    """Equal entropy values break ties by ascending global index."""
+    entropies = np.array([1.0, 1.0, 0.2])
+    selected = rank_frames_by_entropy(
+        entropies,
+        global_indices=[10, 5, 7],
+        n_seeds=2,
+    )
+    assert selected == [1, 0]
+
+
+def test_split_trajectories_from_dataset_preserves_boundaries() -> None:
+    """Trajectory slicing keeps frames grouped by trajectory ID."""
+    dataset = _make_dataset({0: 3, 1: 2})
+    trajectories = split_trajectories_from_dataset(dataset)
+    assert len(trajectories) == 2
+    assert trajectories[0].shape == (3, 2)
+    assert trajectories[1].shape == (2, 2)
+    np.testing.assert_array_equal(trajectories[0][:, 1], [0.0, 0.0, 0.0])
+
+
+def test_validate_maxent_vampnet_policy_params_defaults() -> None:
+    """MaxEnt config validation normalizes defaults."""
+    kwargs = validate_maxent_vampnet_policy_params(
+        {},
+        n_features=4,
+        traj_index_map={0: (0, 5), 1: (5, 10)},
+    )
+    assert kwargs["n_features"] == 4
+    assert kwargs["output_states"] == 4
+    assert kwargs["lagtime"] == 1
+    assert kwargs["batch_size"] == 2048
+    assert kwargs["epochs"] == 100
+
+
+def test_validate_maxent_vampnet_policy_params_rejects_short_trajectory() -> None:
+    """Lagtime validation fails when trajectories are too short."""
+    with pytest.raises(ValueError, match="lagtime"):
+        validate_maxent_vampnet_policy_params(
+            {"lagtime": 5},
+            n_features=4,
+            traj_index_map={0: (0, 4)},
+        )
+
+
+def test_validate_maxent_vampnet_policy_params_rejects_invalid_output_states() -> None:
+    """output_states must be at least two."""
+    with pytest.raises(ValueError, match="output_states"):
+        validate_maxent_vampnet_policy_params({"output_states": 1}, n_features=4)
+
+
+def test_build_policy_kwargs_maxent_vampnet(
+    tmp_path: Path,
+    synthetic_features: Path,
+) -> None:
+    """build_policy_kwargs validates MaxEnt VAMPNet settings."""
+    dataset = load_features(synthetic_features)
+    config = RunConfig(
+        features_dir=synthetic_features,
+        output_dir=tmp_path / "out",
+        policies=["maxent_vampnet"],
+        policy_params={"maxent_vampnet": {"epochs": 2, "output_states": 4}},
+    )
+    kwargs = build_policy_kwargs(
+        "maxent_vampnet",
+        config,
+        n_features=4,
+        traj_index_map=dataset.traj_index_map,
+    )
+    assert kwargs["epochs"] == 2
+    assert kwargs["output_states"] == 4
+
+
+def test_maxent_vampnet_policy_select_frames_with_fake_estimator() -> None:
+    """MaxEnt policy selects highest-entropy frames without clustering."""
+    dataset = _make_dataset({0: 4, 1: 4}, n_features=2)
+    policy = MaxEntVampNetPolicy(
+        n_features=2,
+        output_states=2,
+        lagtime=1,
+        estimator=_FakeMaxEntEstimator(),
+    )
+    seeds = policy.select_frames(dataset, n_seeds=2)
+    assert len(seeds) == 2
+    assert seeds[0].policy == "maxent_vampnet"
+    assert seeds[0].cluster_id is None
+    selected_globals = {seed.global_index for seed in seeds}
+    assert selected_globals == {0, 3}
+    assert policy.last_scores[0]["entropy"] > policy.last_scores[1]["entropy"]
+
+
+def test_run_adaptive_sampling_with_maxent_vampnet(
+    tmp_path: Path,
+    synthetic_features: Path,
+) -> None:
+    """End-to-end MaxEnt-only run skips clustering and writes score artifacts."""
+    pytest.importorskip("deeptime")
+    pytest.importorskip("torch")
+
+    output_dir = tmp_path / "results_maxent"
+    config_path = tmp_path / "config_maxent.yaml"
+    config_path.write_text(
+        f"""
+features_dir: {synthetic_features}
+output_dir: {output_dir}
+policies:
+  - maxent_vampnet
+policy_params:
+  maxent_vampnet:
+    output_states: 4
+    lagtime: 1
+    hidden_layers: [8, 4]
+    batch_size: 16
+    epochs: 1
+    device: cpu
+n_seeds: 2
+random_seed: 7
+write_pdbs: false
+""",
+        encoding="utf-8",
+    )
+
+    results = run_adaptive_sampling(config_path)
+    assert "maxent_vampnet" in results
+    assert len(results["maxent_vampnet"]) == 2
+    assert not (output_dir / "assignments.npy").exists()
+    assert not (output_dir / "cluster_model.pkl").exists()
+    assert not (output_dir / "metadata.csv").exists()
+    policy_dir = output_dir / "maxent_vampnet"
+    assert (policy_dir / "seeds.csv").is_file()
+    assert (policy_dir / "scores.csv").is_file()
+    assert not (policy_dir / "metadata.csv").exists()
+
+
+def test_run_adaptive_sampling_mixed_maxent_and_cluster_policy(
+    tmp_path: Path,
+    synthetic_features: Path,
+) -> None:
+    """Mixed runs cluster once and still score MaxEnt from raw features."""
+    pytest.importorskip("deeptime")
+    pytest.importorskip("torch")
+
+    output_dir = tmp_path / "results_mixed"
+    config_path = tmp_path / "config_mixed.yaml"
+    config_path.write_text(
+        f"""
+features_dir: {synthetic_features}
+output_dir: {output_dir}
+clustering:
+  method: kmeans
+  n_clusters: 3
+policies:
+  - least_counts
+  - maxent_vampnet
+policy_params:
+  maxent_vampnet:
+    output_states: 4
+    lagtime: 1
+    hidden_layers: [8, 4]
+    batch_size: 16
+    epochs: 1
+n_seeds: 2
+random_seed: 7
+write_pdbs: false
+""",
+        encoding="utf-8",
+    )
+
+    results = run_adaptive_sampling(config_path)
+    assert set(results) == {"least_counts", "maxent_vampnet"}
+    assert (output_dir / "assignments.npy").is_file()
+    assert (output_dir / "maxent_vampnet" / "scores.csv").is_file()
+    assert not (output_dir / "maxent_vampnet" / "metadata.csv").exists()
+
+
+def test_validate_config_maxent_vampnet(
+    tmp_path: Path,
+    synthetic_features: Path,
+) -> None:
+    """validate_config accepts a valid MaxEnt VAMPNet configuration."""
+    config_path = tmp_path / "config_maxent_validate.yaml"
+    config_path.write_text(
+        f"""
+features_dir: {synthetic_features}
+output_dir: {tmp_path / "out"}
+policies:
+  - maxent_vampnet
+policy_params:
+  maxent_vampnet:
+    output_states: 4
+    lagtime: 1
+""",
+        encoding="utf-8",
+    )
+    config = validate_config(config_path)
+    assert "maxent_vampnet" in config.policies
