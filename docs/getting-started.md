@@ -9,12 +9,24 @@ configuration.
 pip install adaptivepy-sampling
 ```
 
+For MaxEnt VAMPNet:
+
+```bash
+pip install adaptivepy-sampling[maxent]
+```
+
 For local development:
 
 ```bash
 git clone https://github.com/hnadeem2/AdaptivePy.git
 cd AdaptivePy
 pip install -e ".[dev,docs]"
+```
+
+For MaxEnt development:
+
+```bash
+pip install -e ".[dev,docs,maxent]"
 ```
 
 ## 2. Prepare feature files
@@ -91,8 +103,9 @@ results/
 └── combined_metadata.csv
 ```
 
-When using `fast` or `ma_reap`, those policies add their own subdirectories
-with extra score sidecars — see [Outputs](outputs.md).
+When using `fast`, `ma_reap`, or `knn_as`, those policies add their own
+subdirectories with extra score sidecars. MaxEnt VAMPNet writes per-frame
+`scores.csv` and skips clustering when used alone — see [Outputs](outputs.md).
 
 See [Outputs](outputs.md) for a full description of each file.
 
@@ -100,7 +113,7 @@ See [Outputs](outputs.md) for a full description of each file.
 
 - Add coordinate trajectories and topology for PDB export — see
   [Configuration](configuration.md)
-- Compare policies — see [Policies](policies.md) (`least_counts`, `random`, `fast`, `ma_reap`)
-- Use goal-oriented sampling with `fast` or multi-agent `ma_reap` — see
+- Compare policies — see [Policies](policies.md) (`least_counts`, `random`, `fast`, `ma_reap`, `knn_as`, `maxent_vampnet`)
+- Use goal-oriented sampling with `fast`, multi-agent `ma_reap`, or entropy-based `maxent_vampnet` — see
   [Configuration](configuration.md#policy-parameters) and [Policies](policies.md)
 - Integrate into a pipeline — see [Python API](python-api.md)

@@ -1,12 +1,20 @@
 # AdaptivePy
 
 AdaptivePy performs **adaptive sampling** on molecular dynamics trajectories using
-clustering-based state space partitioning and policy-driven seed selection.
+clustering-based state space partitioning and policy-driven seed selection. It also
+supports frame-level policies such as **MaxEnt VAMPNet**, which score individual
+frames without clustering.
 
 ## Install
 
 ```bash
 pip install adaptivepy-sampling
+```
+
+For MaxEnt VAMPNet:
+
+```bash
+pip install adaptivepy-sampling[maxent]
 ```
 
 ## Quick links
@@ -21,9 +29,9 @@ pip install adaptivepy-sampling
 ## What it does
 
 1. Load per-trajectory feature arrays (`.npy` or `.pkl`)
-2. Cluster frames in feature space
-3. Apply one or more adaptive policies (`least_counts`, `random`, `fast`, `ma_reap`)
-4. Select seed frames from chosen clusters
+2. Cluster frames in feature space (skipped when only frame-level policies are used)
+3. Apply one or more adaptive policies (`least_counts`, `random`, `fast`, `ma_reap`, `knn_as`, `maxent_vampnet`)
+4. Select seed frames from chosen clusters or directly by frame-level scores
 5. Write metadata, assignments, policy-specific scores, and optional PDB structures
 
 ## Example

@@ -30,6 +30,16 @@ policies:
 #     delta: 0.05
 #     regime: collaborative
 
+# Example MaxEnt VAMPNet settings (requires pip install adaptivepy-sampling[maxent])
+# policies:
+#   - maxent_vampnet
+# policy_params:
+#   maxent_vampnet:
+#     output_states: 8
+#     lagtime: 10
+#     epochs: 100
+#     batch_size: 2048
+
 n_seeds: 3
 
 seed_selection:

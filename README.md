@@ -2,7 +2,7 @@
 
 **Adaptive sampling for molecular dynamics trajectories**
 
-Clustering-based state space partitioning and policy-driven seed selection for MD workflows.
+Clustering-based and frame-level adaptive policies for MD workflows, including entropy-based MaxEnt VAMPNet seed selection.
 
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue?style=for-the-badge)](https://hnadeem2.github.io/AdaptivePy/)
 [![PyPI](https://img.shields.io/badge/PyPI-adaptivepy--sampling-orange?style=for-the-badge)](https://pypi.org/project/adaptivepy-sampling/)
@@ -12,21 +12,29 @@ Clustering-based state space partitioning and policy-driven seed selection for M
 
 ## Overview
 
-AdaptivePy helps you identify under-sampled regions of conformational space and select seed frames for new simulations. It loads per-trajectory feature arrays, clusters frames, applies adaptive policies, and writes reproducible metadata and optional PDB structures.
+AdaptivePy helps you identify under-sampled or high-uncertainty regions of conformational space and select seed frames for new simulations. It loads per-trajectory feature arrays, optionally clusters frames, applies adaptive policies, and writes reproducible metadata and optional PDB structures.
+
+Most policies select seeds from clusters. **MaxEnt VAMPNet** (`maxent_vampnet`) is frame-level: it trains a VAMPNet on lagged features and selects frames with the highest Shannon entropy of softmax state probabilities — no clustering required.
 
 **Full documentation:** [https://hnadeem2.github.io/AdaptivePy/](https://hnadeem2.github.io/AdaptivePy/)
 
 | | |
 |---|---|
 | **Input** | Feature arrays (`.npy` / `.pkl`), optional coordinate trajectories |
-| **Clustering** | KMeans, MiniBatch KMeans, regular-space |
-| **Policies** | Least counts, random, FAST, MA-REAP (extensible) |
-| **Output** | Seeds, cluster assignments, model, logs, optional PDBs |
+| **Clustering** | KMeans, MiniBatch KMeans, regular-space (optional for frame-level policies) |
+| **Policies** | Least counts, random, FAST, MA-REAP, kNN-AS, MaxEnt VAMPNet (extensible) |
+| **Output** | Seeds, cluster assignments, model, logs, policy scores, optional PDBs |
 
 ## Installation
 
 ```bash
 pip install adaptivepy-sampling
+```
+
+For **MaxEnt VAMPNet** (requires PyTorch and deeptime):
+
+```bash
+pip install adaptivepy-sampling[maxent]
 ```
 
 For development:
@@ -35,6 +43,12 @@ For development:
 git clone https://github.com/hnadeem2/AdaptivePy.git
 cd AdaptivePy
 pip install -e ".[dev,docs]"
+```
+
+For MaxEnt development:
+
+```bash
+pip install -e ".[dev,docs,maxent]"
 ```
 
 ## Quick start
@@ -84,9 +98,11 @@ Built-in seed-selection policies:
 | `fast` | Goal-directed sampling via feature columns (Zimmerman & Bowman 2015) |
 | `ma_reap` | Multi-agent coordinated sampling with learned CV weights (Kleiman & Shukla 2022) |
 | `knn_as` | k-nearest-neighbors adaptive sampling over cluster representatives (Rovers et al. 2025) |
+| `maxent_vampnet` | Entropy-based frame selection via VAMPNet soft state assignments (Kleiman & Shukla 2023); no clustering |
 
-`fast`, `ma_reap`, and `knn_as` accept extra YAML under `policy_params`.
-MA-REAP requires mapping each trajectory to an agent. See the
+`fast`, `ma_reap`, `knn_as`, and `maxent_vampnet` accept extra YAML under `policy_params`.
+MA-REAP requires mapping each trajectory to an agent. MaxEnt VAMPNet requires the
+`[maxent]` install extra (`pip install adaptivepy-sampling[maxent]`). See the
 [Policies guide](https://hnadeem2.github.io/AdaptivePy/policies/) and
 [Configuration](https://hnadeem2.github.io/AdaptivePy/configuration/).
 
