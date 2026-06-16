@@ -64,6 +64,7 @@ Some policies accept extra settings under `policy_params`:
 policies:
   - fast
   - ma_reap
+  - knn_as
   - least_counts
 
 policy_params:
@@ -80,6 +81,9 @@ policy_params:
     delta: 0.05
     stakes_method: percentage
     regime: collaborative
+  knn_as:
+    k: 5
+    scoring: vectorsum
 ```
 
 ### FAST (`fast`)
@@ -107,6 +111,13 @@ See [Policies](policies.md) for algorithm details.
 
 Every feature trajectory must be assigned to exactly one agent. At least two
 agents are required.
+
+### kNN-AS (`knn_as`)
+
+| Key | Required | Default | Description |
+|-----|----------|---------|-------------|
+| `k` | no | `5` | Nearest-neighbor records requested; clamped to available clusters |
+| `scoring` | no | `vectorsum` | `vectorsum` for summed displacement magnitude, or `distance` for mean neighbor distance |
 
 ## Clustering methods
 

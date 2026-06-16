@@ -26,6 +26,12 @@
         - compute_fast_rewards
         - feature_scale
 
+::: adaptivepy.policies.knn_as
+    options:
+      members:
+        - KnnAsPolicy
+        - compute_knn_as_scores
+
 ::: adaptivepy.policies.ma_reap
     options:
       members:

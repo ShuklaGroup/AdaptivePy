@@ -29,6 +29,7 @@ from adaptivepy.output.writer import (
     write_cluster_statistics,
     write_combined_metadata,
     write_fast_scores,
+    write_knn_as_scores,
     write_ma_reap_outputs,
     write_policy_outputs,
     write_run_config,
@@ -151,6 +152,8 @@ def run_adaptive_sampling(
         )
         if policy_name == "ma_reap":
             policy_kwargs["cluster_centers"] = centers
+        if policy_name == "knn_as":
+            policy_kwargs["cluster_centers"] = centers
 
         policy = get_policy(policy_name, **policy_kwargs)
         selected_clusters = policy.select_clusters(
@@ -172,6 +175,9 @@ def run_adaptive_sampling(
 
         if policy_name == "fast" and hasattr(policy, "last_scores"):
             write_fast_scores(policy.last_scores, policy_dir)
+
+        if policy_name == "knn_as" and hasattr(policy, "last_scores"):
+            write_knn_as_scores(policy.last_scores, policy_dir)
 
         if policy_name == "ma_reap" and hasattr(policy, "last_scores"):
             write_ma_reap_outputs(
