@@ -89,6 +89,7 @@ dmypy.json
 # AdaptivePy run outputs
 results/
 examples/results/
+manuscript_results/
 *.pkl
 assignments.npy
 
