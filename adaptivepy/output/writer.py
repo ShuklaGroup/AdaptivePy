@@ -347,6 +347,62 @@ def write_maxent_vampnet_scores(
     return path
 
 
+def write_ts_dar_scores(
+    scores: Dict[int, Dict[str, Any]],
+    output_dir: Path,
+) -> Path:
+    """Write TS-DAR per-frame OOD scores to ``scores.csv``."""
+    path = ensure_dir(output_dir) / "scores.csv"
+    if not scores:
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=[
+                    "global_index",
+                    "traj_id",
+                    "frame_id",
+                    "ood_score",
+                    "state",
+                    "selected",
+                ],
+            )
+            writer.writeheader()
+        return path
+
+    first_row = next(iter(scores.values()))
+    n_embeddings = len(first_row["embedding"])
+    n_states = len(first_row["probabilities"])
+    fieldnames = [
+        "global_index",
+        "traj_id",
+        "frame_id",
+        "ood_score",
+        "state",
+        "selected",
+        *[f"emb_{idx}" for idx in range(n_embeddings)],
+        *[f"prob_{idx}" for idx in range(n_states)],
+    ]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for global_index in sorted(scores):
+            row = scores[global_index]
+            output_row: Dict[str, Any] = {
+                "global_index": global_index,
+                "traj_id": row["traj_id"],
+                "frame_id": row["frame_id"],
+                "ood_score": row["ood_score"],
+                "state": row["state"],
+                "selected": bool(row["selected"]),
+            }
+            for emb_idx, value in enumerate(row["embedding"]):
+                output_row[f"emb_{emb_idx}"] = value
+            for prob_idx, prob in enumerate(row["probabilities"]):
+                output_row[f"prob_{prob_idx}"] = prob
+            writer.writerow(output_row)
+    return path
+
+
 def write_ma_reap_outputs(
     scores: Dict[int, Dict[str, float]],
     weights: Dict[str, List[float]],

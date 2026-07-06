@@ -16,7 +16,7 @@ downstream analysis.
 
 Clustering artifacts (`assignments.npy`, `cluster_model.pkl`, top-level
 `metadata.csv`) are omitted when all configured policies are frame-level, such
-as `maxent_vampnet` alone.
+as `maxent_vampnet` or `ts_dar` alone.
 
 ## Per-policy outputs
 
@@ -105,6 +105,24 @@ with per-frame entropy and softmax probabilities:
 
 Frame-level MaxEnt runs do not write per-policy `metadata.csv`.
 
+### TS-DAR sidecar files
+
+When using the `ts_dar` policy, `ts_dar/scores.csv` is written with per-frame
+OOD scores, assigned states, embeddings, and softmax probabilities:
+
+| Column | Description |
+|--------|-------------|
+| `global_index` | Row index in the concatenated feature matrix |
+| `traj_id` | Source trajectory index |
+| `frame_id` | Frame index within the trajectory |
+| `ood_score` | TS-DAR out-of-distribution score |
+| `state` | Softmax state assignment |
+| `selected` | Whether the frame was chosen as a seed |
+| `emb_0` … `emb_D` | Hyperspherical embedding coordinates |
+| `prob_0` … `prob_K` | Softmax metastable-state probabilities |
+
+Frame-level TS-DAR runs do not write per-policy `metadata.csv`.
+
 ### Metapolicy outputs
 
 When `metapolicy.enabled: true`, AdaptivePy writes the final ensemble seed set
@@ -116,8 +134,9 @@ under `metapolicy/`:
 | `metadata.csv` | Cluster populations for the clustered ensemble candidates |
 | `votes.csv` | Cluster-level audit table with selection status, vote count, ensemble score, per-policy ranks, and per-policy scores |
 
-Metapolicy output is cluster-level. If MaxEnt VAMPNet is included, its frame
-entropy is aggregated to clusters before voting or allocation.
+Metapolicy output is cluster-level. If MaxEnt VAMPNet or TS-DAR is included,
+its frame entropy or OOD score is aggregated to clusters before voting or
+allocation.
 
 ## PDB export
 

@@ -12,6 +12,8 @@
         - write_policy_outputs
         - write_fast_scores
         - write_ma_reap_outputs
+        - write_maxent_vampnet_scores
+        - write_ts_dar_scores
 
 ::: adaptivepy.output.pdb_writer
     options:

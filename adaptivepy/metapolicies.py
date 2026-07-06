@@ -27,6 +27,45 @@ class MetapolicyDecision:
     vote_rows: List[Dict[str, Any]]
 
 
+def frame_score_cluster_ranking(
+    policy_name: str,
+    scores: Dict[int, Dict[str, Any]],
+    dataset: Dataset,
+    cluster_stats: ClusterStats,
+    rank_depth: int,
+    score_key: str,
+) -> PolicyClusterRanking:
+    """Aggregate frame-level policy scores to cluster-level maximum score."""
+    global_to_cluster = {
+        int(frame.global_index): frame.cluster_id
+        for frame in dataset.frames
+        if frame.global_index is not None and frame.cluster_id is not None
+    }
+    max_scores: Dict[int, float] = {}
+    for global_index, row in scores.items():
+        cluster_id = global_to_cluster.get(int(global_index))
+        if cluster_id is None:
+            continue
+        score = float(row[score_key])
+        current = max_scores.get(cluster_id)
+        if current is None or score > current:
+            max_scores[cluster_id] = score
+
+    ranked = sorted(
+        max_scores,
+        key=lambda cid: (
+            -max_scores[cid],
+            int(cluster_stats[cid]["population"]),
+            cid,
+        ),
+    )
+    return PolicyClusterRanking(
+        policy=policy_name,
+        ranked_clusters=ranked[:rank_depth],
+        scores=max_scores,
+    )
+
+
 def maxent_cluster_ranking(
     policy_name: str,
     scores: Dict[int, Dict[str, Any]],
@@ -35,33 +74,31 @@ def maxent_cluster_ranking(
     rank_depth: int,
 ) -> PolicyClusterRanking:
     """Aggregate MaxEnt frame entropy to cluster-level maximum entropy."""
-    global_to_cluster = {
-        int(frame.global_index): frame.cluster_id
-        for frame in dataset.frames
-        if frame.global_index is not None and frame.cluster_id is not None
-    }
-    max_entropy: Dict[int, float] = {}
-    for global_index, row in scores.items():
-        cluster_id = global_to_cluster.get(int(global_index))
-        if cluster_id is None:
-            continue
-        entropy = float(row["entropy"])
-        current = max_entropy.get(cluster_id)
-        if current is None or entropy > current:
-            max_entropy[cluster_id] = entropy
-
-    ranked = sorted(
-        max_entropy,
-        key=lambda cid: (
-            -max_entropy[cid],
-            int(cluster_stats[cid]["population"]),
-            cid,
-        ),
+    return frame_score_cluster_ranking(
+        policy_name=policy_name,
+        scores=scores,
+        dataset=dataset,
+        cluster_stats=cluster_stats,
+        rank_depth=rank_depth,
+        score_key="entropy",
     )
-    return PolicyClusterRanking(
-        policy=policy_name,
-        ranked_clusters=ranked[:rank_depth],
-        scores=max_entropy,
+
+
+def ts_dar_cluster_ranking(
+    policy_name: str,
+    scores: Dict[int, Dict[str, Any]],
+    dataset: Dataset,
+    cluster_stats: ClusterStats,
+    rank_depth: int,
+) -> PolicyClusterRanking:
+    """Aggregate TS-DAR frame OOD scores to cluster-level maximum OOD score."""
+    return frame_score_cluster_ranking(
+        policy_name=policy_name,
+        scores=scores,
+        dataset=dataset,
+        cluster_stats=cluster_stats,
+        rank_depth=rank_depth,
+        score_key="ood_score",
     )
 
 

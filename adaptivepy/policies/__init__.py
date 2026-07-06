@@ -16,6 +16,7 @@ from adaptivepy.policies import least_counts  # noqa: F401
 from adaptivepy.policies import ma_reap  # noqa: F401
 from adaptivepy.policies import maxent_vampnet  # noqa: F401
 from adaptivepy.policies import random  # noqa: F401
+from adaptivepy.policies import ts_dar  # noqa: F401
 
 __all__ = [
     "POLICY_REGISTRY",

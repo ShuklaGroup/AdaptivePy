@@ -9,10 +9,10 @@ configuration.
 pip install adaptivepy-sampling
 ```
 
-For MaxEnt VAMPNet:
+For Torch-backed policies such as MaxEnt VAMPNet and TS-DAR:
 
 ```bash
-pip install adaptivepy-sampling[maxent]
+pip install adaptivepy-sampling[torch]
 ```
 
 For local development:
@@ -23,10 +23,10 @@ cd AdaptivePy
 pip install -e ".[dev,docs]"
 ```
 
-For MaxEnt development:
+For Torch-backed policy development:
 
 ```bash
-pip install -e ".[dev,docs,maxent]"
+pip install -e ".[dev,docs,torch]"
 ```
 
 ## 2. Prepare feature files
@@ -104,8 +104,9 @@ results/
 ```
 
 When using `fast`, `ma_reap`, or `knn_as`, those policies add their own
-subdirectories with extra score sidecars. MaxEnt VAMPNet writes per-frame
-`scores.csv` and skips clustering when used alone — see [Outputs](outputs.md).
+subdirectories with extra score sidecars. MaxEnt VAMPNet and TS-DAR write
+per-frame `scores.csv` and skip clustering when used alone — see
+[Outputs](outputs.md).
 
 See [Outputs](outputs.md) for a full description of each file.
 
@@ -113,7 +114,7 @@ See [Outputs](outputs.md) for a full description of each file.
 
 - Add coordinate trajectories and topology for PDB export — see
   [Configuration](configuration.md)
-- Compare policies — see [Policies](policies.md) (`least_counts`, `random`, `fast`, `ma_reap`, `knn_as`, `maxent_vampnet`)
-- Use goal-oriented sampling with `fast`, multi-agent `ma_reap`, or entropy-based `maxent_vampnet` — see
+- Compare policies — see [Policies](policies.md) (`least_counts`, `random`, `fast`, `ma_reap`, `knn_as`, `maxent_vampnet`, `ts_dar`)
+- Use goal-oriented sampling with `fast`, multi-agent `ma_reap`, entropy-based `maxent_vampnet`, or OOD-based `ts_dar` — see
   [Configuration](configuration.md#policy-parameters) and [Policies](policies.md)
 - Integrate into a pipeline — see [Python API](python-api.md)

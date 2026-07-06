@@ -10,10 +10,10 @@ cd AdaptivePy
 pip install -e ".[dev,docs]"
 ```
 
-For MaxEnt VAMPNet development and tests:
+For Torch-backed policy development and tests:
 
 ```bash
-pip install -e ".[dev,maxent]"
+pip install -e ".[dev,torch]"
 ```
 
 ## Run tests
@@ -82,6 +82,8 @@ Existing examples with `policy_params`:
   sidecar CSVs (`scores.csv`, `agent_weights.csv`, `stakes.csv`, `executors.csv`)
 - `maxent_vampnet` — VAMPNet training hyperparameters; frame-level entropy
   selection without clustering; writes per-frame `scores.csv`
+- `ts_dar` — TS-DAR training hyperparameters; frame-level OOD score selection
+  without clustering; writes per-frame `scores.csv`
 
 ## CI workflows
 
