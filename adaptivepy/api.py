@@ -27,6 +27,7 @@ from adaptivepy.metapolicies import (
     cluster_policy_ranking,
     majority_polling,
     maxent_cluster_ranking,
+    ts_dar_cluster_ranking,
 )
 from adaptivepy.models import SeedResult
 from adaptivepy.output.pdb_writer import write_seed_pdbs
@@ -42,6 +43,7 @@ from adaptivepy.output.writer import (
     write_maxent_vampnet_scores,
     write_policy_outputs,
     write_run_config,
+    write_ts_dar_scores,
 )
 from adaptivepy.policies import get_policy
 from adaptivepy.policies.base import policy_requires_clustering
@@ -250,6 +252,9 @@ def run_adaptive_sampling(
         if policy_name == "maxent_vampnet" and hasattr(policy, "last_scores"):
             write_maxent_vampnet_scores(policy.last_scores, policy_dir)
 
+        if policy_name == "ts_dar" and hasattr(policy, "last_scores"):
+            write_ts_dar_scores(policy.last_scores, policy_dir)
+
         if (
             config.write_pdbs
             and trajectory_map is not None
@@ -282,6 +287,18 @@ def run_adaptive_sampling(
                 policy = policy_objects[policy_name]
                 rankings.append(
                     maxent_cluster_ranking(
+                        policy_name=policy_name,
+                        scores=getattr(policy, "last_scores", {}),
+                        dataset=dataset,
+                        cluster_stats=cluster_stats,
+                        rank_depth=rank_depth,
+                    )
+                )
+                continue
+            if policy_name == "ts_dar":
+                policy = policy_objects[policy_name]
+                rankings.append(
+                    ts_dar_cluster_ranking(
                         policy_name=policy_name,
                         scores=getattr(policy, "last_scores", {}),
                         dataset=dataset,

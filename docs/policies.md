@@ -140,7 +140,7 @@ the frames with the highest Shannon entropy. **No clustering step is required.**
 Install the optional dependencies first:
 
 ```bash
-pip install -e ".[maxent]"
+pip install -e ".[torch]"
 ```
 
 Configure via `policy_params`:
@@ -175,6 +175,73 @@ policy_params:
 MaxEnt VAMPNet writes `maxent_vampnet/scores.csv` with per-frame entropy and
 softmax probabilities. When it is the only configured policy, clustering
 artifacts are skipped entirely.
+
+### `ts_dar`
+
+Implements **TS-DAR** (Transition State identification via Dispersion and
+vAriational principle Regularized neural networks) from Liu et al. (2025).
+TS-DAR trains a Torch neural network on lagged trajectory features, embeds frames
+on a hypersphere, regularizes metastable state centers with VAMP-2 and
+dispersion losses, and selects frames with the highest out-of-distribution
+(OOD) scores. **No clustering step is required.**
+
+Install the optional Torch dependencies first:
+
+```bash
+pip install -e ".[torch]"
+```
+
+Configure via `policy_params`:
+
+```yaml
+policies:
+  - ts_dar
+
+policy_params:
+  ts_dar:
+    n_states: 4
+    latent_dim: 3
+    encoder_sizes: [4, 128, 64, 3]
+    lagtime: 10
+    learning_rate: 1.0e-3
+    batch_size: 2048
+    epochs: 100
+    pretrain: 10
+    beta: 0.01
+    gamma: 1.0
+    scaling_temperature: 0.1
+    proto_update_factor: 0.5
+    optimizer: Adam
+    device: cpu
+    num_threads: 1
+    train_split: 0.9
+```
+
+In actual configs, `encoder_sizes` must include the input feature dimension as
+the first value, for example `[684, 128, 64, 3]` for 684-dimensional features.
+
+| Key | Required | Default | Description |
+|-----|----------|---------|-------------|
+| `n_states` | no | `min(max(2, n_features), 4)` | Number of metastable states |
+| `latent_dim` | no | `2` or `3` | Hyperspherical embedding dimension |
+| `encoder_sizes` | no | `[n_features, 128, 64, latent_dim]` | Encoder layer sizes |
+| `lagtime` | no | `1` | Lag time in frames for transition pairs |
+| `learning_rate` | no | `1e-3` | Optimizer learning rate |
+| `batch_size` | no | `2048` | Training batch size |
+| `epochs` | no | `100` | Training epochs per run |
+| `pretrain` | no | `10` | VAMP-2-only warmup epochs |
+| `beta` | no | `0.01` | Dispersion loss weight |
+| `gamma` | no | `1.0` | Hypersphere radius |
+| `scaling_temperature` | no | `0.1` | Dispersion loss temperature |
+| `proto_update_factor` | no | `0.5` | EMA update factor for state centers |
+| `optimizer` | no | `Adam` | `Adam`, `SGD`, or `RMSprop` |
+| `device` | no | `cpu` | PyTorch device |
+| `num_threads` | no | `1` | CPU threads for PyTorch |
+| `train_split` | no | `0.9` | Fraction of lagged pairs used for training |
+
+TS-DAR writes `ts_dar/scores.csv` with per-frame OOD scores, assigned states,
+hyperspherical embeddings, and softmax probabilities. When it is the only
+configured policy, clustering artifacts are skipped entirely.
 
 ## Multi-policy runs
 
@@ -212,6 +279,9 @@ results/
 │   ├── stakes.csv
 │   └── executors.csv
 ├── maxent_vampnet/
+│   ├── seeds.csv
+│   └── scores.csv
+├── ts_dar/
 │   ├── seeds.csv
 │   └── scores.csv
 ├── metapolicy/
@@ -252,9 +322,9 @@ metapolicy:
     knn_as: 2
 ```
 
-When MaxEnt VAMPNet participates in an ensemble, AdaptivePy clusters the dataset
-and converts MaxEnt frame entropy to a cluster ranking by taking the maximum
-entropy among frames in each cluster.
+When MaxEnt VAMPNet or TS-DAR participates in an ensemble, AdaptivePy clusters
+the dataset and converts frame scores to a cluster ranking by taking the maximum
+entropy or OOD score among frames in each cluster.
 
 ## Listing available policies
 

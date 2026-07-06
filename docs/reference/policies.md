@@ -47,3 +47,11 @@
         - compute_shannon_entropy
         - rank_frames_by_entropy
         - split_trajectories_from_dataset
+
+::: adaptivepy.policies.ts_dar
+    options:
+      members:
+        - TsDarPolicy
+        - compute_ood_scores
+        - compute_state_centers
+        - rank_frames_by_ood

@@ -89,10 +89,15 @@ policy_params:
     output_states: 8
     lagtime: 10
     epochs: 100
+  ts_dar:
+    n_states: 4
+    latent_dim: 3
+    lagtime: 10
+    epochs: 100
 ```
 
-Install MaxEnt dependencies with `pip install -e ".[maxent]"` when using
-`maxent_vampnet`.
+Install Torch-backed policy dependencies with `pip install -e ".[torch]"` when
+using `maxent_vampnet` or `ts_dar`.
 
 ### FAST (`fast`)
 
@@ -129,7 +134,7 @@ agents are required.
 
 ### MaxEnt VAMPNet (`maxent_vampnet`)
 
-Requires `pip install -e ".[maxent]"`.
+Requires `pip install -e ".[torch]"`.
 
 | Key | Required | Default | Description |
 |-----|----------|---------|-------------|
@@ -144,6 +149,33 @@ Requires `pip install -e ".[maxent]"`.
 
 Each trajectory must contain more frames than `lagtime`. When `maxent_vampnet`
 is the only configured policy, clustering is skipped.
+
+### TS-DAR (`ts_dar`)
+
+Requires `pip install -e ".[torch]"`.
+
+| Key | Required | Default | Description |
+|-----|----------|---------|-------------|
+| `n_states` | no | `min(max(2, n_features), 4)` | Number of metastable states |
+| `latent_dim` | no | `2` if `n_states <= 3`, else `3` | Hyperspherical embedding dimension |
+| `encoder_sizes` | no | `[n_features, 128, 64, latent_dim]` | Encoder layer sizes; first and last values must match input and latent dimensions |
+| `lagtime` | no | `1` | Lag time in frames for transition pairs |
+| `learning_rate` | no | `1e-3` | Optimizer learning rate |
+| `batch_size` | no | `2048` | Training batch size |
+| `epochs` | no | `100` | Training epochs per run |
+| `pretrain` | no | `10` | Epochs trained with VAMP-2 loss only before adding dispersion loss |
+| `beta` | no | `0.01` | Dispersion loss weight |
+| `gamma` | no | `1.0` | Hypersphere radius |
+| `scaling_temperature` | no | `0.1` | Dispersion loss temperature |
+| `proto_update_factor` | no | `0.5` | EMA update factor for state centers |
+| `optimizer` | no | `Adam` | `Adam`, `SGD`, or `RMSprop` |
+| `device` | no | `cpu` | PyTorch device |
+| `num_threads` | no | `1` | CPU threads for PyTorch |
+| `train_split` | no | `0.9` | Fraction of lagged pairs used for training |
+
+Each trajectory must contain more frames than `lagtime`, and the dataset must
+provide at least two lagged frame pairs. When `ts_dar` is the only configured
+policy, clustering is skipped.
 
 ## Metapolicy ensembles
 
@@ -181,9 +213,9 @@ metapolicy:
     knn_as: 2
 ```
 
-If `maxent_vampnet` participates in a metapolicy, clustering is forced so MaxEnt
-frame entropy can be aggregated to clusters. The cluster score is the maximum
-entropy among frames assigned to that cluster.
+If `maxent_vampnet` or `ts_dar` participates in a metapolicy, clustering is
+forced so frame scores can be aggregated to clusters. The cluster score is the
+maximum entropy or OOD score among frames assigned to that cluster.
 
 ## Clustering methods
 

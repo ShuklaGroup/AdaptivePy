@@ -2,7 +2,7 @@
 
 **Adaptive sampling for molecular dynamics trajectories**
 
-Clustering-based and frame-level adaptive policies for MD workflows, including entropy-based MaxEnt VAMPNet seed selection.
+Clustering-based and frame-level adaptive policies for MD workflows, including entropy-based MaxEnt VAMPNet and OOD-based TS-DAR seed selection.
 
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue?style=for-the-badge)](https://hnadeem2.github.io/AdaptivePy/)
 [![PyPI](https://img.shields.io/badge/PyPI-adaptivepy--sampling-orange?style=for-the-badge)](https://pypi.org/project/adaptivepy-sampling/)
@@ -14,7 +14,7 @@ Clustering-based and frame-level adaptive policies for MD workflows, including e
 
 AdaptivePy helps you identify under-sampled or high-uncertainty regions of conformational space and select seed frames for new simulations. It loads per-trajectory feature arrays, optionally clusters frames, applies adaptive policies, and writes reproducible metadata and optional PDB structures.
 
-Most policies select seeds from clusters. **MaxEnt VAMPNet** (`maxent_vampnet`) is frame-level: it trains a VAMPNet on lagged features and selects frames with the highest Shannon entropy of softmax state probabilities — no clustering required.
+Most policies select seeds from clusters. **MaxEnt VAMPNet** (`maxent_vampnet`) and **TS-DAR** (`ts_dar`) are frame-level: they train Torch models on lagged features and select scored frames directly — no clustering required.
 
 **Full documentation:** [https://hnadeem2.github.io/AdaptivePy/](https://hnadeem2.github.io/AdaptivePy/)
 
@@ -22,7 +22,7 @@ Most policies select seeds from clusters. **MaxEnt VAMPNet** (`maxent_vampnet`) 
 |---|---|
 | **Input** | Feature arrays (`.npy` / `.pkl`), optional coordinate trajectories |
 | **Clustering** | KMeans, MiniBatch KMeans, regular-space (optional for frame-level policies) |
-| **Policies** | Least counts, random, FAST, MA-REAP, kNN-AS, MaxEnt VAMPNet (extensible) |
+| **Policies** | Least counts, random, FAST, MA-REAP, kNN-AS, MaxEnt VAMPNet, TS-DAR (extensible) |
 | **Output** | Seeds, cluster assignments, model, logs, policy scores, optional PDBs |
 
 ## Installation
@@ -31,10 +31,10 @@ Most policies select seeds from clusters. **MaxEnt VAMPNet** (`maxent_vampnet`) 
 pip install adaptivepy-sampling
 ```
 
-For **MaxEnt VAMPNet** (requires PyTorch and deeptime):
+For Torch-backed policies such as **MaxEnt VAMPNet** and **TS-DAR**:
 
 ```bash
-pip install adaptivepy-sampling[maxent]
+pip install adaptivepy-sampling[torch]
 ```
 
 For development:
@@ -45,10 +45,10 @@ cd AdaptivePy
 pip install -e ".[dev,docs]"
 ```
 
-For MaxEnt development:
+For Torch-backed policy development:
 
 ```bash
-pip install -e ".[dev,docs,maxent]"
+pip install -e ".[dev,docs,torch]"
 ```
 
 ## Quick start
@@ -98,11 +98,12 @@ Built-in seed-selection policies:
 | `fast` | Goal-directed sampling via feature columns (Zimmerman & Bowman 2015) |
 | `ma_reap` | Multi-agent coordinated sampling with learned CV weights (Kleiman & Shukla 2022) |
 | `knn_as` | k-nearest-neighbors adaptive sampling over cluster representatives (Rovers et al. 2025) |
-| `maxent_vampnet` | Entropy-based frame selection via VAMPNet soft state assignments (Kleiman & Shukla 2023); no clustering |
+| `maxent_vampnet` | Entropy-based frame selection via VAMPNet soft state assignments (Kleiman & Shukla 2023); no clustering (forced for ensemble policy) |
+| `ts_dar` | OOD-score frame selection via TS-DAR hyperspherical embeddings (Liu et al. 2025); no clustering (forced for ensemble policy) |
 
-`fast`, `ma_reap`, `knn_as`, and `maxent_vampnet` accept extra YAML under `policy_params`.
-MA-REAP requires mapping each trajectory to an agent. MaxEnt VAMPNet requires the
-`[maxent]` install extra (`pip install adaptivepy-sampling[maxent]`). See the
+`fast`, `ma_reap`, `knn_as`, `maxent_vampnet`, and `ts_dar` accept extra YAML under `policy_params`.
+MA-REAP requires mapping each trajectory to an agent. Torch-backed policies require the
+`[torch]` install extra (`pip install adaptivepy-sampling[torch]`). See the
 [Policies guide](https://hnadeem2.github.io/AdaptivePy/policies/) and
 [Configuration](https://hnadeem2.github.io/AdaptivePy/configuration/).
 
@@ -121,7 +122,8 @@ per-policy seed allocation through the `metapolicy` YAML block.
 
 ## Contributors
 
-- Hassan
+- Hassan Nadeem
+- Diego E. Kleiman
 
 ## License
 

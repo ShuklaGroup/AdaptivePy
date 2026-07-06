@@ -17,6 +17,7 @@ from adaptivepy.config.schema import (
     validate_knn_as_policy_params,
     validate_ma_reap_policy_params,
     validate_maxent_vampnet_policy_params,
+    validate_ts_dar_policy_params,
 )
 from adaptivepy.io.loader import load_feature_array, load_features
 from adaptivepy.metapolicies import (
@@ -24,6 +25,7 @@ from adaptivepy.metapolicies import (
     allocation,
     majority_polling,
     maxent_cluster_ranking,
+    ts_dar_cluster_ranking,
 )
 from adaptivepy.models import Dataset, FrameRecord
 from adaptivepy.policies import list_policies
@@ -40,6 +42,13 @@ from adaptivepy.policies.ma_reap import (
     aggregate_agent_scores,
     apply_stakes_method,
     optimize_agent_weights,
+)
+from adaptivepy.policies.ts_dar import (
+    TsDarPolicy,
+    TsDarScoreResult,
+    compute_ood_scores,
+    compute_state_centers,
+    rank_frames_by_ood,
 )
 from adaptivepy.stats.cluster_stats import ClusterStats
 
@@ -110,6 +119,7 @@ def test_list_policies() -> None:
     assert "ma_reap" in policies
     assert "knn_as" in policies
     assert "maxent_vampnet" in policies
+    assert "ts_dar" in policies
 
 
 def test_compute_knn_as_scores_vectorsum() -> None:
@@ -959,6 +969,34 @@ def test_maxent_cluster_ranking_uses_max_entropy_per_cluster() -> None:
     assert ranking.scores[1] == pytest.approx(0.9)
 
 
+def test_ts_dar_cluster_ranking_uses_max_ood_per_cluster() -> None:
+    """TS-DAR metapolicy ranking aggregates frame OOD score by cluster maximum."""
+    dataset = _make_dataset({0: 4}, n_features=2)
+    for frame, cluster_id in zip(dataset.frames, [0, 0, 1, 1]):
+        frame.cluster_id = cluster_id
+    cluster_stats = {
+        0: {
+            "population": 2,
+            "frames": [dataset.frames[0], dataset.frames[1]],
+        },
+        1: {
+            "population": 2,
+            "frames": [dataset.frames[2], dataset.frames[3]],
+        },
+    }
+    scores = {
+        0: {"ood_score": 0.1},
+        1: {"ood_score": 0.8},
+        2: {"ood_score": 0.2},
+        3: {"ood_score": 0.3},
+    }
+    ranking = ts_dar_cluster_ranking(
+        "ts_dar", scores, dataset, cluster_stats, rank_depth=2
+    )
+    assert ranking.ranked_clusters == [0, 1]
+    assert ranking.scores[0] == pytest.approx(0.8)
+
+
 class _FakeMaxEntEstimator:
     """Deterministic softmax probabilities for MaxEnt policy tests."""
 
@@ -971,6 +1009,30 @@ class _FakeMaxEntEstimator:
             else:
                 probabilities[idx] = [0.9, 0.1]
         return probabilities
+
+
+class _FakeTsDarEstimator:
+    """Deterministic OOD scores for TS-DAR policy tests."""
+
+    def score(self, trajectories: list[np.ndarray]) -> TsDarScoreResult:
+        features = np.concatenate(trajectories, axis=0)
+        n_frames = features.shape[0]
+        ood_scores = np.linspace(0.1, 0.8, n_frames)
+        ood_scores[2] = 1.0
+        ood_scores[5] = 0.95
+        probabilities = np.tile(np.array([[0.8, 0.2]]), (n_frames, 1))
+        states = np.zeros(n_frames, dtype=int)
+        embeddings = np.column_stack(
+            [np.ones(n_frames, dtype=float), np.zeros(n_frames, dtype=float)]
+        )
+        state_centers = np.array([[1.0, 0.0], [0.0, 1.0]])
+        return TsDarScoreResult(
+            ood_scores=ood_scores,
+            states=states,
+            embeddings=embeddings,
+            probabilities=probabilities,
+            state_centers=state_centers,
+        )
 
 
 def test_compute_shannon_entropy_uniform_and_peaked() -> None:
@@ -986,6 +1048,26 @@ def test_rank_frames_by_entropy_tie_breaks_by_global_index() -> None:
     entropies = np.array([1.0, 1.0, 0.2])
     selected = rank_frames_by_entropy(
         entropies,
+        global_indices=[10, 5, 7],
+        n_seeds=2,
+    )
+    assert selected == [1, 0]
+
+
+def test_compute_ts_dar_ood_scores_from_state_centers() -> None:
+    """OOD scores increase for embeddings between state centers."""
+    embeddings = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+    states = np.array([0, 1, 0])
+    centers = compute_state_centers(embeddings[:2], states[:2], n_states=2)
+    scores = compute_ood_scores(embeddings, centers)
+    assert scores[2] > scores[0]
+    assert scores[2] > scores[1]
+
+
+def test_rank_frames_by_ood_tie_breaks_by_global_index() -> None:
+    """Equal OOD scores break ties by ascending global index."""
+    selected = rank_frames_by_ood(
+        np.array([1.0, 1.0, 0.2]),
         global_indices=[10, 5, 7],
         n_seeds=2,
     )
@@ -1054,6 +1136,61 @@ def test_build_policy_kwargs_maxent_vampnet(
     assert kwargs["output_states"] == 4
 
 
+def test_validate_ts_dar_policy_params_defaults() -> None:
+    """TS-DAR config validation normalizes defaults."""
+    kwargs = validate_ts_dar_policy_params(
+        {},
+        n_features=4,
+        traj_index_map={0: (0, 5), 1: (5, 10)},
+    )
+    assert kwargs["n_features"] == 4
+    assert kwargs["n_states"] == 4
+    assert kwargs["latent_dim"] == 3
+    assert kwargs["encoder_sizes"] == [4, 128, 64, 3]
+    assert kwargs["lagtime"] == 1
+    assert kwargs["batch_size"] == 2048
+    assert kwargs["epochs"] == 100
+
+
+def test_validate_ts_dar_policy_params_rejects_bad_encoder() -> None:
+    """TS-DAR encoder sizes must match input and latent dimensions."""
+    with pytest.raises(ValueError, match="first value"):
+        validate_ts_dar_policy_params(
+            {"encoder_sizes": [3, 8, 2]},
+            n_features=4,
+        )
+    with pytest.raises(ValueError, match="last value"):
+        validate_ts_dar_policy_params(
+            {"latent_dim": 3, "encoder_sizes": [4, 8, 2]},
+            n_features=4,
+        )
+
+
+def test_build_policy_kwargs_ts_dar(
+    tmp_path: Path,
+    synthetic_features: Path,
+) -> None:
+    """build_policy_kwargs validates TS-DAR settings."""
+    dataset = load_features(synthetic_features)
+    config = RunConfig(
+        features_dir=synthetic_features,
+        output_dir=tmp_path / "out",
+        policies=["ts_dar"],
+        policy_params={"ts_dar": {"epochs": 2, "n_states": 3, "latent_dim": 2}},
+        random_seed=11,
+    )
+    kwargs = build_policy_kwargs(
+        "ts_dar",
+        config,
+        n_features=4,
+        traj_index_map=dataset.traj_index_map,
+    )
+    assert kwargs["epochs"] == 2
+    assert kwargs["n_states"] == 3
+    assert kwargs["latent_dim"] == 2
+    assert kwargs["random_state"] == 11
+
+
 def test_maxent_vampnet_policy_select_frames_with_fake_estimator() -> None:
     """MaxEnt policy selects highest-entropy frames without clustering."""
     dataset = _make_dataset({0: 4, 1: 4}, n_features=2)
@@ -1070,6 +1207,25 @@ def test_maxent_vampnet_policy_select_frames_with_fake_estimator() -> None:
     selected_globals = {seed.global_index for seed in seeds}
     assert selected_globals == {0, 3}
     assert policy.last_scores[0]["entropy"] > policy.last_scores[1]["entropy"]
+
+
+def test_ts_dar_policy_select_frames_with_fake_estimator() -> None:
+    """TS-DAR policy selects highest-OOD frames without clustering."""
+    dataset = _make_dataset({0: 4, 1: 4}, n_features=2)
+    policy = TsDarPolicy(
+        n_features=2,
+        n_states=2,
+        latent_dim=2,
+        lagtime=1,
+        estimator=_FakeTsDarEstimator(),
+    )
+    seeds = policy.select_frames(dataset, n_seeds=2)
+    assert len(seeds) == 2
+    assert seeds[0].policy == "ts_dar"
+    assert seeds[0].cluster_id is None
+    selected_globals = {seed.global_index for seed in seeds}
+    assert selected_globals == {2, 5}
+    assert policy.last_scores[2]["ood_score"] > policy.last_scores[0]["ood_score"]
 
 
 def test_run_adaptive_sampling_with_maxent_vampnet(
@@ -1241,4 +1397,135 @@ metapolicy:
     assert len(results["metapolicy"]) == 2
     assert (output_dir / "assignments.npy").is_file()
     assert (output_dir / "maxent_vampnet" / "scores.csv").is_file()
+    assert (output_dir / "metapolicy" / "votes.csv").is_file()
+
+
+def test_run_adaptive_sampling_with_ts_dar(
+    tmp_path: Path,
+    synthetic_features: Path,
+) -> None:
+    """End-to-end TS-DAR-only run skips clustering and writes score artifacts."""
+    pytest.importorskip("torch")
+
+    output_dir = tmp_path / "results_ts_dar"
+    config_path = tmp_path / "config_ts_dar.yaml"
+    config_path.write_text(
+        f"""
+features_dir: {synthetic_features}
+output_dir: {output_dir}
+policies:
+  - ts_dar
+policy_params:
+  ts_dar:
+    n_states: 2
+    latent_dim: 2
+    encoder_sizes: [4, 8, 2]
+    lagtime: 1
+    batch_size: 16
+    epochs: 1
+    pretrain: 0
+    device: cpu
+n_seeds: 2
+random_seed: 7
+write_pdbs: false
+""",
+        encoding="utf-8",
+    )
+
+    results = run_adaptive_sampling(config_path)
+    assert "ts_dar" in results
+    assert len(results["ts_dar"]) == 2
+    assert not (output_dir / "assignments.npy").exists()
+    assert not (output_dir / "cluster_model.pkl").exists()
+    policy_dir = output_dir / "ts_dar"
+    assert (policy_dir / "seeds.csv").is_file()
+    assert (policy_dir / "scores.csv").is_file()
+    assert not (policy_dir / "metadata.csv").exists()
+
+
+def test_run_adaptive_sampling_mixed_ts_dar_and_cluster_policy(
+    tmp_path: Path,
+    synthetic_features: Path,
+) -> None:
+    """Mixed runs cluster once and still score TS-DAR from raw features."""
+    pytest.importorskip("torch")
+
+    output_dir = tmp_path / "results_ts_dar_mixed"
+    config_path = tmp_path / "config_ts_dar_mixed.yaml"
+    config_path.write_text(
+        f"""
+features_dir: {synthetic_features}
+output_dir: {output_dir}
+clustering:
+  method: kmeans
+  n_clusters: 3
+policies:
+  - least_counts
+  - ts_dar
+policy_params:
+  ts_dar:
+    n_states: 2
+    latent_dim: 2
+    encoder_sizes: [4, 8, 2]
+    lagtime: 1
+    batch_size: 16
+    epochs: 1
+    pretrain: 0
+n_seeds: 2
+random_seed: 7
+write_pdbs: false
+""",
+        encoding="utf-8",
+    )
+
+    results = run_adaptive_sampling(config_path)
+    assert set(results) == {"least_counts", "ts_dar"}
+    assert (output_dir / "assignments.npy").is_file()
+    assert (output_dir / "ts_dar" / "scores.csv").is_file()
+    assert not (output_dir / "ts_dar" / "metadata.csv").exists()
+
+
+def test_run_adaptive_sampling_ts_dar_metapolicy_forces_clustering(
+    tmp_path: Path,
+    synthetic_features: Path,
+) -> None:
+    """TS-DAR metapolicy runs clustering so OOD can be compared by cluster."""
+    pytest.importorskip("torch")
+
+    output_dir = tmp_path / "results_ts_dar_meta"
+    config_path = tmp_path / "config_ts_dar_meta.yaml"
+    config_path.write_text(
+        f"""
+features_dir: {synthetic_features}
+output_dir: {output_dir}
+clustering:
+  method: kmeans
+  n_clusters: 3
+policies:
+  - ts_dar
+policy_params:
+  ts_dar:
+    n_states: 2
+    latent_dim: 2
+    encoder_sizes: [4, 8, 2]
+    lagtime: 1
+    batch_size: 16
+    epochs: 1
+    pretrain: 0
+n_seeds: 2
+random_seed: 7
+write_pdbs: false
+metapolicy:
+  enabled: true
+  policies: [ts_dar]
+  n_seeds: 2
+""",
+        encoding="utf-8",
+    )
+
+    results = run_adaptive_sampling(config_path)
+    assert "metapolicy" in results
+    assert len(results["metapolicy"]) == 2
+    assert (output_dir / "assignments.npy").is_file()
+    assert (output_dir / "ts_dar" / "scores.csv").is_file()
     assert (output_dir / "metapolicy" / "votes.csv").is_file()

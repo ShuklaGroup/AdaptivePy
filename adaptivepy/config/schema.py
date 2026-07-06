@@ -549,6 +549,119 @@ def validate_maxent_vampnet_policy_params(
     return kwargs
 
 
+def validate_ts_dar_policy_params(
+    params: Dict[str, Any],
+    n_features: int,
+    traj_index_map: Optional[Dict[int, tuple[int, int]]] = None,
+) -> Dict[str, Any]:
+    """Validate and normalize TS-DAR policy parameters."""
+    n_states = int(params.get("n_states", min(max(2, n_features), 4)))
+    if n_states < 2:
+        raise ValueError("TS-DAR 'n_states' must be >= 2.")
+
+    latent_dim = int(params.get("latent_dim", 2 if n_states <= 3 else 3))
+    if latent_dim < 1:
+        raise ValueError("TS-DAR 'latent_dim' must be >= 1.")
+
+    encoder_sizes = params.get("encoder_sizes")
+    if encoder_sizes is None:
+        normalized_encoder = [n_features, 128, 64, latent_dim]
+    else:
+        if not isinstance(encoder_sizes, (list, tuple)) or len(encoder_sizes) < 2:
+            raise ValueError(
+                "TS-DAR 'encoder_sizes' must contain at least input and latent sizes."
+            )
+        normalized_encoder = [int(size) for size in encoder_sizes]
+    if any(size < 1 for size in normalized_encoder):
+        raise ValueError("TS-DAR 'encoder_sizes' must contain positive integers.")
+    if normalized_encoder[0] != n_features:
+        raise ValueError("TS-DAR 'encoder_sizes' first value must equal n_features.")
+    if normalized_encoder[-1] != latent_dim:
+        raise ValueError("TS-DAR 'encoder_sizes' last value must equal latent_dim.")
+
+    lagtime = int(params.get("lagtime", 1))
+    if lagtime < 1:
+        raise ValueError("TS-DAR 'lagtime' must be >= 1.")
+
+    if traj_index_map:
+        total_pairs = 0
+        for traj_id, (start, end) in sorted(traj_index_map.items()):
+            n_frames = end - start
+            if n_frames <= lagtime:
+                raise ValueError(
+                    f"Trajectory {traj_id} has {n_frames} frames, but lagtime "
+                    f"requires at least {lagtime + 1} frames."
+                )
+            total_pairs += n_frames - lagtime
+        if total_pairs < 2:
+            raise ValueError("TS-DAR requires at least two lagged frame pairs.")
+
+    learning_rate = float(params.get("learning_rate", 1e-3))
+    if learning_rate <= 0:
+        raise ValueError("TS-DAR 'learning_rate' must be positive.")
+
+    batch_size = int(params.get("batch_size", 2048))
+    if batch_size < 1:
+        raise ValueError("TS-DAR 'batch_size' must be >= 1.")
+
+    epochs = int(params.get("epochs", 100))
+    if epochs < 1:
+        raise ValueError("TS-DAR 'epochs' must be >= 1.")
+
+    pretrain = int(params.get("pretrain", 10))
+    if pretrain < 0:
+        raise ValueError("TS-DAR 'pretrain' must be >= 0.")
+
+    beta = float(params.get("beta", 0.01))
+    if beta < 0:
+        raise ValueError("TS-DAR 'beta' must be non-negative.")
+
+    gamma = float(params.get("gamma", 1.0))
+    if gamma <= 0:
+        raise ValueError("TS-DAR 'gamma' must be positive.")
+
+    scaling_temperature = float(params.get("scaling_temperature", 0.1))
+    if scaling_temperature <= 0:
+        raise ValueError("TS-DAR 'scaling_temperature' must be positive.")
+
+    proto_update_factor = float(params.get("proto_update_factor", 0.5))
+    if not (0.0 <= proto_update_factor <= 1.0):
+        raise ValueError("TS-DAR 'proto_update_factor' must be in [0, 1].")
+
+    optimizer = str(params.get("optimizer", "Adam"))
+    if optimizer not in {"Adam", "SGD", "RMSprop"}:
+        raise ValueError("TS-DAR 'optimizer' must be one of: Adam, SGD, RMSprop.")
+
+    device = str(params.get("device", "cpu"))
+    num_threads = int(params.get("num_threads", 1))
+    if num_threads < 1:
+        raise ValueError("TS-DAR 'num_threads' must be >= 1.")
+
+    train_split = float(params.get("train_split", 0.9))
+    if not (0.0 < train_split <= 1.0):
+        raise ValueError("TS-DAR 'train_split' must be in (0, 1].")
+
+    return {
+        "n_features": n_features,
+        "n_states": n_states,
+        "latent_dim": latent_dim,
+        "encoder_sizes": normalized_encoder,
+        "lagtime": lagtime,
+        "learning_rate": learning_rate,
+        "batch_size": batch_size,
+        "epochs": epochs,
+        "pretrain": pretrain,
+        "beta": beta,
+        "gamma": gamma,
+        "scaling_temperature": scaling_temperature,
+        "proto_update_factor": proto_update_factor,
+        "optimizer": optimizer,
+        "device": device,
+        "num_threads": num_threads,
+        "train_split": train_split,
+    }
+
+
 def build_policy_kwargs(
     policy_name: str,
     config: RunConfig,
@@ -612,6 +725,17 @@ def build_policy_kwargs(
                 traj_index_map=traj_index_map,
             )
         )
+    elif policy_name == "ts_dar":
+        if n_features is None:
+            raise ValueError("TS-DAR policy validation requires feature dimensionality.")
+        kwargs.update(
+            validate_ts_dar_policy_params(
+                params,
+                n_features=n_features,
+                traj_index_map=traj_index_map,
+            )
+        )
+        kwargs["random_state"] = config.random_seed
 
     return kwargs
 
