@@ -86,12 +86,13 @@ policy_params:
     k: 5
     scoring: vectorsum
   maxent_vampnet:
-    output_states: 8
+    n_states: 8
     lagtime: 10
     epochs: 100
   ts_dar:
     n_states: 4
     latent_dim: 3
+    hidden_layers: [128, 64]
     lagtime: 10
     epochs: 100
 ```
@@ -138,7 +139,7 @@ Requires `pip install -e ".[torch]"`.
 
 | Key | Required | Default | Description |
 |-----|----------|---------|-------------|
-| `output_states` | no | `n_features` | Number of softmax output nodes |
+| `n_states` | no | `n_features` | Number of softmax output nodes |
 | `lagtime` | no | `1` | Lag time in frames for VAMPNet training |
 | `hidden_layers` | no | author default | Hidden MLP layer widths |
 | `learning_rate` | no | `1e-4` | VAMPNet learning rate |
@@ -158,7 +159,7 @@ Requires `pip install -e ".[torch]"`.
 |-----|----------|---------|-------------|
 | `n_states` | no | `min(max(2, n_features), 4)` | Number of metastable states |
 | `latent_dim` | no | `2` if `n_states <= 3`, else `3` | Hyperspherical embedding dimension |
-| `encoder_sizes` | no | `[n_features, 128, 64, latent_dim]` | Encoder layer sizes; first and last values must match input and latent dimensions |
+| `hidden_layers` | no | `[128, 64]` | Hidden encoder layer widths |
 | `lagtime` | no | `1` | Lag time in frames for transition pairs |
 | `learning_rate` | no | `1e-3` | Optimizer learning rate |
 | `batch_size` | no | `2048` | Training batch size |

@@ -156,7 +156,7 @@ def _resolve_device(device_name: str, num_threads: int) -> Any:
 
 def build_vampnet_estimator(
     n_features: int,
-    output_states: int,
+    n_states: int,
     hidden_layers: Sequence[int],
     learning_rate: float,
     device_name: str,
@@ -168,7 +168,7 @@ def build_vampnet_estimator(
     from deeptime.util.torch import MLP
 
     device = _resolve_device(device_name, num_threads)
-    units = [int(n_features), *[int(width) for width in hidden_layers], int(output_states)]
+    units = [int(n_features), *[int(width) for width in hidden_layers], int(n_states)]
     lobe = MLP(
         units=units,
         nonlinearity=nn.ReLU,
@@ -219,8 +219,10 @@ class MaxEntVampNetPolicy(Policy):
 
     Parameters
     ----------
-    output_states : int or None
+    n_states : int or None
         Number of softmax output nodes. Defaults to the feature dimensionality.
+    output_states : int or None
+        Backward-compatible alias for ``n_states``.
     lagtime : int
         Lag time in frames for VAMPNet training.
     hidden_layers : sequence of int or None
@@ -247,6 +249,7 @@ class MaxEntVampNetPolicy(Policy):
         self,
         n_features: int,
         output_states: Optional[int] = None,
+        n_states: Optional[int] = None,
         lagtime: int = DEFAULT_LAGTIME,
         hidden_layers: Optional[Sequence[int]] = None,
         learning_rate: float = DEFAULT_LEARNING_RATE,
@@ -260,11 +263,17 @@ class MaxEntVampNetPolicy(Policy):
             raise ValueError("MaxEnt VAMPNet requires at least one feature dimension.")
 
         self.n_features = int(n_features)
-        self.output_states = (
-            int(output_states) if output_states is not None else self.n_features
-        )
-        if self.output_states < 2:
-            raise ValueError("MaxEnt VAMPNet 'output_states' must be >= 2.")
+        if output_states is not None and n_states is not None:
+            if int(output_states) != int(n_states):
+                raise ValueError(
+                    "MaxEnt VAMPNet 'output_states' and 'n_states' must match "
+                    "when both are provided."
+                )
+        resolved_states = n_states if n_states is not None else output_states
+        self.n_states = int(resolved_states) if resolved_states is not None else self.n_features
+        self.output_states = self.n_states
+        if self.n_states < 2:
+            raise ValueError("MaxEnt VAMPNet 'n_states' must be >= 2.")
 
         self.lagtime = int(lagtime)
         self.hidden_layers = (
@@ -298,7 +307,7 @@ class MaxEntVampNetPolicy(Policy):
             return self._estimator
         estimator = build_vampnet_estimator(
             n_features=self.n_features,
-            output_states=self.output_states,
+            n_states=self.n_states,
             hidden_layers=self.hidden_layers,
             learning_rate=self.learning_rate,
             device_name=self.device,

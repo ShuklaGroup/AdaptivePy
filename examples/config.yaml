@@ -35,7 +35,7 @@ policies:
 #   - maxent_vampnet
 # policy_params:
 #   maxent_vampnet:
-#     output_states: 8
+#     n_states: 8
 #     lagtime: 10
 #     epochs: 100
 #     batch_size: 2048
@@ -47,7 +47,7 @@ policies:
 #   ts_dar:
 #     n_states: 4
 #     latent_dim: 3
-#     encoder_sizes: [4, 128, 64, 3]
+#     hidden_layers: [128, 64]
 #     lagtime: 10
 #     epochs: 100
 #     batch_size: 2048

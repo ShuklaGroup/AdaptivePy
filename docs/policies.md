@@ -151,7 +151,7 @@ policies:
 
 policy_params:
   maxent_vampnet:
-    output_states: 8
+    n_states: 8
     lagtime: 10
     hidden_layers: [16, 32, 64, 128, 256, 128, 64, 32, 16]
     learning_rate: 1.0e-4
@@ -163,7 +163,7 @@ policy_params:
 
 | Key | Required | Default | Description |
 |-----|----------|---------|-------------|
-| `output_states` | no | `n_features` | Number of softmax output nodes |
+| `n_states` | no | `n_features` | Number of softmax output nodes |
 | `lagtime` | no | `1` | Lag time in frames for VAMPNet training |
 | `hidden_layers` | no | author default | Hidden MLP layer widths |
 | `learning_rate` | no | `1e-4` | VAMPNet learning rate |
@@ -201,7 +201,7 @@ policy_params:
   ts_dar:
     n_states: 4
     latent_dim: 3
-    encoder_sizes: [4, 128, 64, 3]
+    hidden_layers: [128, 64]
     lagtime: 10
     learning_rate: 1.0e-3
     batch_size: 2048
@@ -217,14 +217,11 @@ policy_params:
     train_split: 0.9
 ```
 
-In actual configs, `encoder_sizes` must include the input feature dimension as
-the first value, for example `[684, 128, 64, 3]` for 684-dimensional features.
-
 | Key | Required | Default | Description |
 |-----|----------|---------|-------------|
 | `n_states` | no | `min(max(2, n_features), 4)` | Number of metastable states |
 | `latent_dim` | no | `2` or `3` | Hyperspherical embedding dimension |
-| `encoder_sizes` | no | `[n_features, 128, 64, latent_dim]` | Encoder layer sizes |
+| `hidden_layers` | no | `[128, 64]` | Hidden encoder layer widths |
 | `lagtime` | no | `1` | Lag time in frames for transition pairs |
 | `learning_rate` | no | `1e-3` | Optimizer learning rate |
 | `batch_size` | no | `2048` | Training batch size |

@@ -1092,7 +1092,7 @@ def test_validate_maxent_vampnet_policy_params_defaults() -> None:
         traj_index_map={0: (0, 5), 1: (5, 10)},
     )
     assert kwargs["n_features"] == 4
-    assert kwargs["output_states"] == 4
+    assert kwargs["n_states"] == 4
     assert kwargs["lagtime"] == 1
     assert kwargs["batch_size"] == 2048
     assert kwargs["epochs"] == 100
@@ -1108,10 +1108,19 @@ def test_validate_maxent_vampnet_policy_params_rejects_short_trajectory() -> Non
         )
 
 
-def test_validate_maxent_vampnet_policy_params_rejects_invalid_output_states() -> None:
-    """output_states must be at least two."""
-    with pytest.raises(ValueError, match="output_states"):
-        validate_maxent_vampnet_policy_params({"output_states": 1}, n_features=4)
+def test_validate_maxent_vampnet_policy_params_rejects_invalid_n_states() -> None:
+    """n_states must be at least two."""
+    with pytest.raises(ValueError, match="n_states"):
+        validate_maxent_vampnet_policy_params({"n_states": 1}, n_features=4)
+
+
+def test_validate_maxent_vampnet_policy_params_accepts_output_states_alias() -> None:
+    """output_states remains a backward-compatible alias for n_states."""
+    kwargs = validate_maxent_vampnet_policy_params(
+        {"output_states": 3},
+        n_features=4,
+    )
+    assert kwargs["n_states"] == 3
 
 
 def test_build_policy_kwargs_maxent_vampnet(
@@ -1124,7 +1133,7 @@ def test_build_policy_kwargs_maxent_vampnet(
         features_dir=synthetic_features,
         output_dir=tmp_path / "out",
         policies=["maxent_vampnet"],
-        policy_params={"maxent_vampnet": {"epochs": 2, "output_states": 4}},
+        policy_params={"maxent_vampnet": {"epochs": 2, "n_states": 4}},
     )
     kwargs = build_policy_kwargs(
         "maxent_vampnet",
@@ -1133,7 +1142,7 @@ def test_build_policy_kwargs_maxent_vampnet(
         traj_index_map=dataset.traj_index_map,
     )
     assert kwargs["epochs"] == 2
-    assert kwargs["output_states"] == 4
+    assert kwargs["n_states"] == 4
 
 
 def test_validate_ts_dar_policy_params_defaults() -> None:
@@ -1146,14 +1155,14 @@ def test_validate_ts_dar_policy_params_defaults() -> None:
     assert kwargs["n_features"] == 4
     assert kwargs["n_states"] == 4
     assert kwargs["latent_dim"] == 3
-    assert kwargs["encoder_sizes"] == [4, 128, 64, 3]
+    assert kwargs["hidden_layers"] == [128, 64]
     assert kwargs["lagtime"] == 1
     assert kwargs["batch_size"] == 2048
     assert kwargs["epochs"] == 100
 
 
-def test_validate_ts_dar_policy_params_rejects_bad_encoder() -> None:
-    """TS-DAR encoder sizes must match input and latent dimensions."""
+def test_validate_ts_dar_policy_params_rejects_bad_encoder_alias() -> None:
+    """TS-DAR encoder_sizes alias must match input and latent dimensions."""
     with pytest.raises(ValueError, match="first value"):
         validate_ts_dar_policy_params(
             {"encoder_sizes": [3, 8, 2]},
@@ -1166,6 +1175,15 @@ def test_validate_ts_dar_policy_params_rejects_bad_encoder() -> None:
         )
 
 
+def test_validate_ts_dar_policy_params_accepts_encoder_sizes_alias() -> None:
+    """encoder_sizes remains a backward-compatible alias for hidden_layers."""
+    kwargs = validate_ts_dar_policy_params(
+        {"latent_dim": 2, "encoder_sizes": [4, 8, 2]},
+        n_features=4,
+    )
+    assert kwargs["hidden_layers"] == [8]
+
+
 def test_build_policy_kwargs_ts_dar(
     tmp_path: Path,
     synthetic_features: Path,
@@ -1176,7 +1194,14 @@ def test_build_policy_kwargs_ts_dar(
         features_dir=synthetic_features,
         output_dir=tmp_path / "out",
         policies=["ts_dar"],
-        policy_params={"ts_dar": {"epochs": 2, "n_states": 3, "latent_dim": 2}},
+        policy_params={
+            "ts_dar": {
+                "epochs": 2,
+                "n_states": 3,
+                "latent_dim": 2,
+                "hidden_layers": [8],
+            }
+        },
         random_seed=11,
     )
     kwargs = build_policy_kwargs(
@@ -1188,6 +1213,7 @@ def test_build_policy_kwargs_ts_dar(
     assert kwargs["epochs"] == 2
     assert kwargs["n_states"] == 3
     assert kwargs["latent_dim"] == 2
+    assert kwargs["hidden_layers"] == [8]
     assert kwargs["random_state"] == 11
 
 
@@ -1196,7 +1222,7 @@ def test_maxent_vampnet_policy_select_frames_with_fake_estimator() -> None:
     dataset = _make_dataset({0: 4, 1: 4}, n_features=2)
     policy = MaxEntVampNetPolicy(
         n_features=2,
-        output_states=2,
+        n_states=2,
         lagtime=1,
         estimator=_FakeMaxEntEstimator(),
     )
@@ -1246,7 +1272,7 @@ policies:
   - maxent_vampnet
 policy_params:
   maxent_vampnet:
-    output_states: 4
+    n_states: 4
     lagtime: 1
     hidden_layers: [8, 4]
     batch_size: 16
@@ -1293,7 +1319,7 @@ policies:
   - maxent_vampnet
 policy_params:
   maxent_vampnet:
-    output_states: 4
+    n_states: 4
     lagtime: 1
     hidden_layers: [8, 4]
     batch_size: 16
@@ -1326,7 +1352,7 @@ policies:
   - maxent_vampnet
 policy_params:
   maxent_vampnet:
-    output_states: 4
+    n_states: 4
     lagtime: 1
 """,
         encoding="utf-8",
@@ -1376,7 +1402,7 @@ policies:
   - maxent_vampnet
 policy_params:
   maxent_vampnet:
-    output_states: 4
+    n_states: 4
     lagtime: 1
     hidden_layers: [8, 4]
     batch_size: 16
@@ -1419,7 +1445,7 @@ policy_params:
   ts_dar:
     n_states: 2
     latent_dim: 2
-    encoder_sizes: [4, 8, 2]
+    hidden_layers: [8]
     lagtime: 1
     batch_size: 16
     epochs: 1
@@ -1466,7 +1492,7 @@ policy_params:
   ts_dar:
     n_states: 2
     latent_dim: 2
-    encoder_sizes: [4, 8, 2]
+    hidden_layers: [8]
     lagtime: 1
     batch_size: 16
     epochs: 1
@@ -1507,7 +1533,7 @@ policy_params:
   ts_dar:
     n_states: 2
     latent_dim: 2
-    encoder_sizes: [4, 8, 2]
+    hidden_layers: [8]
     lagtime: 1
     batch_size: 16
     epochs: 1

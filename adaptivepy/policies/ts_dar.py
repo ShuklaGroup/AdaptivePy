@@ -28,6 +28,7 @@ DEFAULT_OPTIMIZER = "Adam"
 DEFAULT_DEVICE = "cpu"
 DEFAULT_NUM_THREADS = 1
 DEFAULT_TRAIN_SPLIT = 0.9
+DEFAULT_HIDDEN_LAYERS = [128, 64]
 TSDAR_EPSILON = 1e-6
 
 
@@ -54,13 +55,22 @@ def default_latent_dim(n_states: int) -> int:
     return 2 if int(n_states) <= 3 else 3
 
 
-def default_encoder_sizes(n_features: int, latent_dim: int) -> List[int]:
-    """Return default TS-DAR encoder layer sizes."""
+def default_hidden_layers() -> List[int]:
+    """Return default TS-DAR hidden encoder layer widths."""
+    return list(DEFAULT_HIDDEN_LAYERS)
+
+
+def encoder_sizes_from_hidden_layers(
+    n_features: int,
+    hidden_layers: Sequence[int],
+    latent_dim: int,
+) -> List[int]:
+    """Build full encoder sizes from input size, hidden widths, and latent size."""
     if n_features < 1:
         raise ValueError("n_features must be positive.")
     if latent_dim < 1:
         raise ValueError("latent_dim must be positive.")
-    return [int(n_features), 128, 64, int(latent_dim)]
+    return [int(n_features), *[int(width) for width in hidden_layers], int(latent_dim)]
 
 
 def create_lagged_arrays(
@@ -115,7 +125,9 @@ def _set_torch_seed(random_state: Optional[int]) -> None:
 
 
 def build_tsdar_lobe(
-    encoder_sizes: Sequence[int],
+    n_features: int,
+    hidden_layers: Sequence[int],
+    latent_dim: int,
     n_states: int,
     gamma: float = DEFAULT_GAMMA,
 ) -> Any:
@@ -123,9 +135,9 @@ def build_tsdar_lobe(
     torch = _require_torch()
     import torch.nn as nn
 
-    sizes = [int(size) for size in encoder_sizes]
+    sizes = encoder_sizes_from_hidden_layers(n_features, hidden_layers, latent_dim)
     if len(sizes) < 2:
-        raise ValueError("TS-DAR encoder_sizes must contain at least input and latent sizes.")
+        raise ValueError("TS-DAR encoder must contain at least input and latent sizes.")
     if int(n_states) < 2:
         raise ValueError("TS-DAR n_states must be >= 2.")
 
@@ -366,7 +378,7 @@ def fit_tsdar_estimator(
     n_features: int,
     n_states: int,
     latent_dim: int,
-    encoder_sizes: Sequence[int],
+    hidden_layers: Sequence[int],
     lagtime: int,
     learning_rate: float,
     batch_size: int,
@@ -409,7 +421,13 @@ def fit_tsdar_estimator(
         shuffle=True,
         drop_last=False,
     )
-    lobe = build_tsdar_lobe(encoder_sizes, n_states=n_states, gamma=gamma).to(device)
+    lobe = build_tsdar_lobe(
+        n_features=n_features,
+        hidden_layers=hidden_layers,
+        latent_dim=latent_dim,
+        n_states=n_states,
+        gamma=gamma,
+    ).to(device)
     optimizers = {
         "Adam": torch.optim.Adam,
         "SGD": torch.optim.SGD,
@@ -459,6 +477,7 @@ class TsDarPolicy(Policy):
         n_features: int,
         n_states: Optional[int] = None,
         latent_dim: Optional[int] = None,
+        hidden_layers: Optional[Sequence[int]] = None,
         encoder_sizes: Optional[Sequence[int]] = None,
         lagtime: int = DEFAULT_LAGTIME,
         learning_rate: float = DEFAULT_LEARNING_RATE,
@@ -487,15 +506,40 @@ class TsDarPolicy(Policy):
         )
         if self.latent_dim < 1:
             raise ValueError("TS-DAR 'latent_dim' must be >= 1.")
-        self.encoder_sizes = (
-            [int(size) for size in encoder_sizes]
-            if encoder_sizes is not None
-            else default_encoder_sizes(self.n_features, self.latent_dim)
+        if hidden_layers is not None and encoder_sizes is not None:
+            expected = encoder_sizes_from_hidden_layers(
+                self.n_features,
+                hidden_layers,
+                self.latent_dim,
+            )
+            if [int(size) for size in encoder_sizes] != expected:
+                raise ValueError(
+                    "TS-DAR 'hidden_layers' and 'encoder_sizes' describe "
+                    "different architectures."
+                )
+        if hidden_layers is None and encoder_sizes is not None:
+            sizes = [int(size) for size in encoder_sizes]
+            if len(sizes) < 2:
+                raise ValueError(
+                    "TS-DAR 'encoder_sizes' must contain at least input and latent sizes."
+                )
+            if sizes[0] != self.n_features:
+                raise ValueError("TS-DAR encoder_sizes first value must equal n_features.")
+            if sizes[-1] != self.latent_dim:
+                raise ValueError("TS-DAR encoder_sizes last value must equal latent_dim.")
+            hidden_layers = sizes[1:-1]
+        self.hidden_layers = (
+            [int(width) for width in hidden_layers]
+            if hidden_layers is not None
+            else default_hidden_layers()
         )
-        if self.encoder_sizes[0] != self.n_features:
-            raise ValueError("TS-DAR encoder_sizes first value must equal n_features.")
-        if self.encoder_sizes[-1] != self.latent_dim:
-            raise ValueError("TS-DAR encoder_sizes last value must equal latent_dim.")
+        if any(width < 1 for width in self.hidden_layers):
+            raise ValueError("TS-DAR 'hidden_layers' must contain positive integers.")
+        self.encoder_sizes = encoder_sizes_from_hidden_layers(
+            self.n_features,
+            self.hidden_layers,
+            self.latent_dim,
+        )
         self.lagtime = int(lagtime)
         self.learning_rate = float(learning_rate)
         self.batch_size = int(batch_size)
@@ -530,7 +574,7 @@ class TsDarPolicy(Policy):
             n_features=self.n_features,
             n_states=self.n_states,
             latent_dim=self.latent_dim,
-            encoder_sizes=self.encoder_sizes,
+            hidden_layers=self.hidden_layers,
             lagtime=self.lagtime,
             learning_rate=self.learning_rate,
             batch_size=self.batch_size,

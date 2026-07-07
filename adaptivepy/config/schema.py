@@ -483,12 +483,16 @@ def validate_maxent_vampnet_policy_params(
     dict
         Normalized keyword arguments for :class:`MaxEntVampNetPolicy`.
     """
-    output_states = params.get("output_states")
-    if output_states is None:
-        output_states = n_features
-    output_states = int(output_states)
-    if output_states < 2:
-        raise ValueError("MaxEnt VAMPNet 'output_states' must be >= 2.")
+    if "n_states" in params and "output_states" in params:
+        if int(params["n_states"]) != int(params["output_states"]):
+            raise ValueError(
+                "MaxEnt VAMPNet 'n_states' and 'output_states' must match "
+                "when both are provided."
+            )
+    n_states_raw = params.get("n_states", params.get("output_states", n_features))
+    n_states = int(n_states_raw)
+    if n_states < 2:
+        raise ValueError("MaxEnt VAMPNet 'n_states' must be >= 2.")
 
     lagtime = int(params.get("lagtime", 1))
     if lagtime < 1:
@@ -536,7 +540,7 @@ def validate_maxent_vampnet_policy_params(
 
     kwargs: Dict[str, Any] = {
         "n_features": n_features,
-        "output_states": output_states,
+        "n_states": n_states,
         "lagtime": lagtime,
         "learning_rate": learning_rate,
         "batch_size": batch_size,
@@ -563,21 +567,40 @@ def validate_ts_dar_policy_params(
     if latent_dim < 1:
         raise ValueError("TS-DAR 'latent_dim' must be >= 1.")
 
+    hidden_layers = params.get("hidden_layers")
     encoder_sizes = params.get("encoder_sizes")
-    if encoder_sizes is None:
-        normalized_encoder = [n_features, 128, 64, latent_dim]
-    else:
+    if hidden_layers is not None:
+        if not isinstance(hidden_layers, (list, tuple)):
+            raise ValueError("TS-DAR 'hidden_layers' must be a list of integers.")
+        normalized_layers = [int(width) for width in hidden_layers]
+    elif encoder_sizes is not None:
         if not isinstance(encoder_sizes, (list, tuple)) or len(encoder_sizes) < 2:
             raise ValueError(
                 "TS-DAR 'encoder_sizes' must contain at least input and latent sizes."
             )
         normalized_encoder = [int(size) for size in encoder_sizes]
-    if any(size < 1 for size in normalized_encoder):
-        raise ValueError("TS-DAR 'encoder_sizes' must contain positive integers.")
-    if normalized_encoder[0] != n_features:
-        raise ValueError("TS-DAR 'encoder_sizes' first value must equal n_features.")
-    if normalized_encoder[-1] != latent_dim:
-        raise ValueError("TS-DAR 'encoder_sizes' last value must equal latent_dim.")
+        if any(size < 1 for size in normalized_encoder):
+            raise ValueError("TS-DAR 'encoder_sizes' must contain positive integers.")
+        if normalized_encoder[0] != n_features:
+            raise ValueError("TS-DAR 'encoder_sizes' first value must equal n_features.")
+        if normalized_encoder[-1] != latent_dim:
+            raise ValueError("TS-DAR 'encoder_sizes' last value must equal latent_dim.")
+        normalized_layers = normalized_encoder[1:-1]
+    else:
+        normalized_layers = [128, 64]
+    if not isinstance(normalized_layers, list) or any(
+        width < 1 for width in normalized_layers
+    ):
+        raise ValueError("TS-DAR 'hidden_layers' must contain positive integers.")
+
+    if hidden_layers is not None and encoder_sizes is not None:
+        expected_encoder = [n_features, *normalized_layers, latent_dim]
+        normalized_encoder = [int(size) for size in encoder_sizes]
+        if normalized_encoder != expected_encoder:
+            raise ValueError(
+                "TS-DAR 'hidden_layers' and 'encoder_sizes' describe "
+                "different architectures."
+            )
 
     lagtime = int(params.get("lagtime", 1))
     if lagtime < 1:
@@ -645,7 +668,7 @@ def validate_ts_dar_policy_params(
         "n_features": n_features,
         "n_states": n_states,
         "latent_dim": latent_dim,
-        "encoder_sizes": normalized_encoder,
+        "hidden_layers": normalized_layers,
         "lagtime": lagtime,
         "learning_rate": learning_rate,
         "batch_size": batch_size,
