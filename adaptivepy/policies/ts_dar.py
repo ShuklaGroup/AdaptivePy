@@ -130,6 +130,7 @@ def build_tsdar_lobe(
     latent_dim: int,
     n_states: int,
     gamma: float = DEFAULT_GAMMA,
+    epsilon: float = TSDAR_EPSILON,
 ) -> Any:
     """Build the TS-DAR neural network lobe."""
     torch = _require_torch()
@@ -154,6 +155,7 @@ def build_tsdar_lobe(
             self.softmax = nn.Softmax(dim=-1)
             self.n_states = int(n_states)
             self.gamma = float(gamma)
+            self.epsilon = float(epsilon)
             self.hypersphere_embs: Optional[Any] = None
             self.logits: Optional[Any] = None
             self.probs: Optional[Any] = None
@@ -161,7 +163,10 @@ def build_tsdar_lobe(
         def forward(self, x: Any) -> Any:
             embeddings = self.encoder(x)
             norms = torch.linalg.norm(embeddings, dim=-1, keepdim=True)
-            embeddings = self.gamma * embeddings / torch.clamp(norms, min=TSDAR_EPSILON)
+            embeddings = self.gamma * embeddings / torch.clamp(
+                norms,
+                min=self.epsilon,
+            )
             self.hypersphere_embs = embeddings
             self.logits = self.classifier(embeddings)
             self.probs = self.softmax(self.logits)
@@ -280,10 +285,12 @@ class _TsDarEstimator:
         lobe: Any,
         device: Any,
         batch_size: int,
+        epsilon: float,
     ) -> None:
         self.lobe = lobe
         self.device = device
         self.batch_size = int(batch_size)
+        self.epsilon = float(epsilon)
 
     def _transform_array(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         torch = _require_torch()
@@ -310,7 +317,11 @@ class _TsDarEstimator:
         features = np.concatenate([np.asarray(traj, dtype=np.float32) for traj in trajectories])
         probabilities, embeddings, states = self._transform_array(features)
         state_centers = compute_state_centers(embeddings, states, self.lobe.n_states)
-        ood_scores = compute_ood_scores(embeddings, state_centers)
+        ood_scores = compute_ood_scores(
+            embeddings,
+            state_centers,
+            epsilon=self.epsilon,
+        )
         return TsDarScoreResult(
             ood_scores=ood_scores,
             states=states,
@@ -343,14 +354,15 @@ def compute_state_centers(
 def compute_ood_scores(
     embeddings: np.ndarray,
     state_centers: np.ndarray,
+    epsilon: float = TSDAR_EPSILON,
 ) -> np.ndarray:
     """Compute TS-DAR OOD scores from cosine distance to nearest state center."""
     emb = np.asarray(embeddings, dtype=float)
     centers = np.asarray(state_centers, dtype=float)
     emb_norm = np.linalg.norm(emb, axis=1, keepdims=True)
     center_norm = np.linalg.norm(centers, axis=1, keepdims=True).T
-    normalized_emb = emb / np.clip(emb_norm, TSDAR_EPSILON, None)
-    normalized_centers = centers / np.clip(center_norm.T, TSDAR_EPSILON, None)
+    normalized_emb = emb / np.clip(emb_norm, float(epsilon), None)
+    normalized_centers = centers / np.clip(center_norm.T, float(epsilon), None)
     similarities = normalized_emb.dot(normalized_centers.T)
     return 1.0 - np.max(similarities, axis=1)
 
@@ -393,6 +405,7 @@ def fit_tsdar_estimator(
     num_threads: int,
     train_split: float,
     random_state: Optional[int],
+    epsilon: float = TSDAR_EPSILON,
 ) -> _TsDarEstimator:
     """Train a TS-DAR estimator on lagged trajectory feature arrays."""
     torch = _require_torch()
@@ -427,6 +440,7 @@ def fit_tsdar_estimator(
         latent_dim=latent_dim,
         n_states=n_states,
         gamma=gamma,
+        epsilon=epsilon,
     ).to(device)
     optimizers = {
         "Adam": torch.optim.Adam,
@@ -455,14 +469,19 @@ def fit_tsdar_estimator(
             probs_0 = lobe(batch_0)
             embeddings_0 = lobe.hypersphere_embs
             probs_1 = lobe(batch_1)
-            loss = vamp2_loss(probs_0, probs_1)
+            loss = vamp2_loss(probs_0, probs_1, epsilon=epsilon)
             if epoch >= int(pretrain):
                 labels_0 = torch.argmax(probs_0, dim=-1).detach()
                 loss = loss + float(beta) * dispersion(embeddings_0, labels_0)
             loss.backward()
             optimizer_obj.step()
 
-    return _TsDarEstimator(lobe=lobe, device=device, batch_size=batch_size)
+    return _TsDarEstimator(
+        lobe=lobe,
+        device=device,
+        batch_size=batch_size,
+        epsilon=epsilon,
+    )
 
 
 @register_policy
@@ -492,6 +511,7 @@ class TsDarPolicy(Policy):
         device: str = DEFAULT_DEVICE,
         num_threads: int = DEFAULT_NUM_THREADS,
         train_split: float = DEFAULT_TRAIN_SPLIT,
+        epsilon: float = TSDAR_EPSILON,
         random_state: Optional[int] = None,
         estimator: Optional[Any] = None,
     ) -> None:
@@ -553,6 +573,9 @@ class TsDarPolicy(Policy):
         self.device = str(device)
         self.num_threads = int(num_threads)
         self.train_split = float(train_split)
+        self.epsilon = float(epsilon)
+        if self.epsilon <= 0:
+            raise ValueError("TS-DAR 'epsilon' must be positive.")
         self.random_state = random_state
         self._estimator = estimator
         self.last_scores: Dict[int, Dict[str, Any]] = {}
@@ -589,6 +612,7 @@ class TsDarPolicy(Policy):
             num_threads=self.num_threads,
             train_split=self.train_split,
             random_state=self.random_state,
+            epsilon=self.epsilon,
         )
 
     def select_frames(self, dataset: Dataset, n_seeds: int) -> List[SeedResult]:

@@ -37,6 +37,7 @@ policies:
 #   maxent_vampnet:
 #     n_states: 8
 #     lagtime: 10
+#     epsilon: 1.0e-6
 #     epochs: 100
 #     batch_size: 2048
 
@@ -49,6 +50,7 @@ policies:
 #     latent_dim: 3
 #     hidden_layers: [128, 64]
 #     lagtime: 10
+#     epsilon: 1.0e-6
 #     epochs: 100
 #     batch_size: 2048
 

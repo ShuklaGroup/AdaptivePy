@@ -525,6 +525,10 @@ def validate_maxent_vampnet_policy_params(
     if learning_rate <= 0:
         raise ValueError("MaxEnt VAMPNet 'learning_rate' must be positive.")
 
+    epsilon = float(params.get("epsilon", 1e-6))
+    if epsilon <= 0:
+        raise ValueError("MaxEnt VAMPNet 'epsilon' must be positive.")
+
     batch_size = int(params.get("batch_size", 2048))
     if batch_size < 1:
         raise ValueError("MaxEnt VAMPNet 'batch_size' must be >= 1.")
@@ -543,6 +547,7 @@ def validate_maxent_vampnet_policy_params(
         "n_states": n_states,
         "lagtime": lagtime,
         "learning_rate": learning_rate,
+        "epsilon": epsilon,
         "batch_size": batch_size,
         "epochs": epochs,
         "device": device,
@@ -647,6 +652,10 @@ def validate_ts_dar_policy_params(
     if scaling_temperature <= 0:
         raise ValueError("TS-DAR 'scaling_temperature' must be positive.")
 
+    epsilon = float(params.get("epsilon", 1e-6))
+    if epsilon <= 0:
+        raise ValueError("TS-DAR 'epsilon' must be positive.")
+
     proto_update_factor = float(params.get("proto_update_factor", 0.5))
     if not (0.0 <= proto_update_factor <= 1.0):
         raise ValueError("TS-DAR 'proto_update_factor' must be in [0, 1].")
@@ -677,6 +686,7 @@ def validate_ts_dar_policy_params(
         "beta": beta,
         "gamma": gamma,
         "scaling_temperature": scaling_temperature,
+        "epsilon": epsilon,
         "proto_update_factor": proto_update_factor,
         "optimizer": optimizer,
         "device": device,

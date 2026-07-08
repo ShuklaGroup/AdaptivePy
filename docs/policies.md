@@ -155,6 +155,7 @@ policy_params:
     lagtime: 10
     hidden_layers: [16, 32, 64, 128, 256, 128, 64, 32, 16]
     learning_rate: 1.0e-4
+    epsilon: 1.0e-6
     batch_size: 2048
     epochs: 100
     device: cpu
@@ -167,6 +168,7 @@ policy_params:
 | `lagtime` | no | `1` | Lag time in frames for VAMPNet training |
 | `hidden_layers` | no | author default | Hidden MLP layer widths |
 | `learning_rate` | no | `1e-4` | VAMPNet learning rate |
+| `epsilon` | no | `1e-6` | Numerical regularization for VAMPNet eigendecomposition |
 | `batch_size` | no | `2048` | Training batch size |
 | `epochs` | no | `100` | Training epochs per run |
 | `device` | no | `cpu` | PyTorch device (`cpu` or `cuda`) |
@@ -210,6 +212,7 @@ policy_params:
     beta: 0.01
     gamma: 1.0
     scaling_temperature: 0.1
+    epsilon: 1.0e-6
     proto_update_factor: 0.5
     optimizer: Adam
     device: cpu
@@ -230,6 +233,7 @@ policy_params:
 | `beta` | no | `0.01` | Dispersion loss weight |
 | `gamma` | no | `1.0` | Hypersphere radius |
 | `scaling_temperature` | no | `0.1` | Dispersion loss temperature |
+| `epsilon` | no | `1e-6` | Numerical regularization for VAMP-2 eigendecomposition and vector normalization |
 | `proto_update_factor` | no | `0.5` | EMA update factor for state centers |
 | `optimizer` | no | `Adam` | `Adam`, `SGD`, or `RMSprop` |
 | `device` | no | `cpu` | PyTorch device |

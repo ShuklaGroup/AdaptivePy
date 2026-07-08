@@ -1096,6 +1096,22 @@ def test_validate_maxent_vampnet_policy_params_defaults() -> None:
     assert kwargs["lagtime"] == 1
     assert kwargs["batch_size"] == 2048
     assert kwargs["epochs"] == 100
+    assert kwargs["epsilon"] == 1e-6
+
+
+def test_validate_maxent_vampnet_policy_params_accepts_epsilon() -> None:
+    """MaxEnt config validation exposes eigendecomposition epsilon."""
+    kwargs = validate_maxent_vampnet_policy_params(
+        {"epsilon": 1e-6},
+        n_features=4,
+    )
+    assert kwargs["epsilon"] == 1e-6
+
+
+def test_validate_maxent_vampnet_policy_params_rejects_invalid_epsilon() -> None:
+    """MaxEnt epsilon must be positive."""
+    with pytest.raises(ValueError, match="epsilon"):
+        validate_maxent_vampnet_policy_params({"epsilon": 0.0}, n_features=4)
 
 
 def test_validate_maxent_vampnet_policy_params_rejects_short_trajectory() -> None:
@@ -1133,7 +1149,13 @@ def test_build_policy_kwargs_maxent_vampnet(
         features_dir=synthetic_features,
         output_dir=tmp_path / "out",
         policies=["maxent_vampnet"],
-        policy_params={"maxent_vampnet": {"epochs": 2, "n_states": 4}},
+        policy_params={
+            "maxent_vampnet": {
+                "epochs": 2,
+                "n_states": 4,
+                "epsilon": 1e-6,
+            }
+        },
     )
     kwargs = build_policy_kwargs(
         "maxent_vampnet",
@@ -1143,6 +1165,7 @@ def test_build_policy_kwargs_maxent_vampnet(
     )
     assert kwargs["epochs"] == 2
     assert kwargs["n_states"] == 4
+    assert kwargs["epsilon"] == 1e-6
 
 
 def test_validate_ts_dar_policy_params_defaults() -> None:
@@ -1159,6 +1182,22 @@ def test_validate_ts_dar_policy_params_defaults() -> None:
     assert kwargs["lagtime"] == 1
     assert kwargs["batch_size"] == 2048
     assert kwargs["epochs"] == 100
+    assert kwargs["epsilon"] == 1e-6
+
+
+def test_validate_ts_dar_policy_params_accepts_epsilon() -> None:
+    """TS-DAR config validation exposes numerical epsilon."""
+    kwargs = validate_ts_dar_policy_params(
+        {"epsilon": 1e-5},
+        n_features=4,
+    )
+    assert kwargs["epsilon"] == 1e-5
+
+
+def test_validate_ts_dar_policy_params_rejects_invalid_epsilon() -> None:
+    """TS-DAR epsilon must be positive."""
+    with pytest.raises(ValueError, match="epsilon"):
+        validate_ts_dar_policy_params({"epsilon": 0.0}, n_features=4)
 
 
 def test_validate_ts_dar_policy_params_rejects_bad_encoder_alias() -> None:
@@ -1200,6 +1239,7 @@ def test_build_policy_kwargs_ts_dar(
                 "n_states": 3,
                 "latent_dim": 2,
                 "hidden_layers": [8],
+                "epsilon": 1e-5,
             }
         },
         random_seed=11,
@@ -1214,6 +1254,7 @@ def test_build_policy_kwargs_ts_dar(
     assert kwargs["n_states"] == 3
     assert kwargs["latent_dim"] == 2
     assert kwargs["hidden_layers"] == [8]
+    assert kwargs["epsilon"] == 1e-5
     assert kwargs["random_state"] == 11
 
 

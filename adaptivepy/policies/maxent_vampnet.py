@@ -18,7 +18,7 @@ DEFAULT_EPOCHS = 100
 DEFAULT_LAGTIME = 1
 DEFAULT_DEVICE = "cpu"
 DEFAULT_NUM_THREADS = 1
-VAMPNET_EPSILON = 1e-12
+VAMPNET_EPSILON = 1e-6
 
 
 def split_trajectories_from_dataset(dataset: Dataset) -> List[np.ndarray]:
@@ -161,6 +161,7 @@ def build_vampnet_estimator(
     learning_rate: float,
     device_name: str,
     num_threads: int,
+    epsilon: float = VAMPNET_EPSILON,
 ) -> Any:
     """Construct an untrained deeptime VAMPNet with a softmax output lobe."""
     import torch.nn as nn
@@ -178,7 +179,7 @@ def build_vampnet_estimator(
         lobe=lobe,
         learning_rate=float(learning_rate),
         device=device,
-        epsilon=VAMPNET_EPSILON,
+        epsilon=float(epsilon),
     )
 
 
@@ -237,6 +238,8 @@ class MaxEntVampNetPolicy(Policy):
         PyTorch device name, typically ``cpu`` or ``cuda``.
     num_threads : int
         CPU threads used by PyTorch during training.
+    epsilon : float
+        Numerical regularization constant passed to deeptime VAMPNet.
     estimator : object or None
         Optional pre-fitted estimator for testing. When provided, training is
         skipped and this estimator is used for scoring.
@@ -257,6 +260,7 @@ class MaxEntVampNetPolicy(Policy):
         epochs: int = DEFAULT_EPOCHS,
         device: str = DEFAULT_DEVICE,
         num_threads: int = DEFAULT_NUM_THREADS,
+        epsilon: float = VAMPNET_EPSILON,
         estimator: Optional[Any] = None,
     ) -> None:
         if n_features < 1:
@@ -289,6 +293,9 @@ class MaxEntVampNetPolicy(Policy):
         self.epochs = int(epochs)
         self.device = str(device)
         self.num_threads = int(num_threads)
+        self.epsilon = float(epsilon)
+        if self.epsilon <= 0:
+            raise ValueError("MaxEnt VAMPNet 'epsilon' must be positive.")
         self._estimator = estimator
         self.last_scores: Dict[int, Dict[str, Any]] = {}
 
@@ -312,6 +319,7 @@ class MaxEntVampNetPolicy(Policy):
             learning_rate=self.learning_rate,
             device_name=self.device,
             num_threads=self.num_threads,
+            epsilon=self.epsilon,
         )
         return fit_vampnet_estimator(
             estimator,
