@@ -16,7 +16,7 @@ AdaptivePy helps you identify under-sampled or high-uncertainty regions of confo
 
 Most policies select seeds from clusters. **MaxEnt VAMPNet** (`maxent_vampnet`) and **TS-DAR** (`ts_dar`) are frame-level: they train Torch models on lagged features and select scored frames directly — no clustering required.
 
-**Full documentation:** [https://hnadeem2.github.io/AdaptivePy/](https://hnadeem2.github.io/AdaptivePy/)
+**Full documentation:** [https://shuklagroup.github.io/AdaptivePy/](https://shuklagroup.github.io/AdaptivePy/)
 
 | | |
 |---|---|
