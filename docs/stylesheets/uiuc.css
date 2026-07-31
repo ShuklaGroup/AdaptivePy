@@ -35,3 +35,16 @@
 .md-typeset a:hover {
   color: var(--uiuc-orange);
 }
+
+/* Place the Illinois Block I to the right of the "AdaptivePy" site title. */
+.md-header__title .md-header__topic:first-child .md-ellipsis::after {
+  content: "";
+  display: inline-block;
+  width: 1.1em;
+  height: 1.1em;
+  margin-left: 0.4em;
+  vertical-align: -0.2em;
+  background: url("../assets/uiuc-block-i.svg") no-repeat center center;
+  background-size: contain;
+}
+
