@@ -1,8 +1,8 @@
 site_name: AdaptivePy
 site_description: Adaptive sampling for molecular dynamics trajectories
-site_url: https://hnadeem2.github.io/AdaptivePy/
-repo_url: https://github.com/hnadeem2/AdaptivePy
-repo_name: hnadeem2/AdaptivePy
+site_url: https://shuklagroup.github.io/AdaptivePy/
+repo_url: https://github.com/shuklagroup/AdaptivePy
+repo_name: shuklagroup/AdaptivePy
 edit_uri: edit/main/docs/
 
 theme:
@@ -84,4 +84,4 @@ nav:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/hnadeem2/AdaptivePy
+      link: https://github.com/shuklagroup/AdaptivePy

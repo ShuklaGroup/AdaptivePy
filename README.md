@@ -40,7 +40,7 @@ pip install adaptivepy-sampling[torch]
 For development:
 
 ```bash
-git clone https://github.com/hnadeem2/AdaptivePy.git
+git clone https://github.com/shuklagroup/AdaptivePy.git
 cd AdaptivePy
 pip install -e ".[dev,docs]"
 ```
@@ -69,7 +69,7 @@ pip install -e ".[dev,docs,torch]"
    adaptivepy run examples/config.yaml
    ```
 
-See the [Getting Started guide](https://hnadeem2.github.io/AdaptivePy/getting-started/) for a complete walkthrough.
+See the [Getting Started guide](https://shuklagroup.github.io/AdaptivePy/getting-started/) for a complete walkthrough.
 
 ## CLI
 
@@ -104,8 +104,8 @@ Built-in seed-selection policies:
 `fast`, `ma_reap`, `knn_as`, `maxent_vampnet`, and `ts_dar` accept extra YAML under `policy_params`.
 MA-REAP requires mapping each trajectory to an agent. Torch-backed policies require the
 `[torch]` install extra (`pip install adaptivepy-sampling[torch]`). See the
-[Policies guide](https://hnadeem2.github.io/AdaptivePy/policies/) and
-[Configuration](https://hnadeem2.github.io/AdaptivePy/configuration/).
+[Policies guide](https://shuklagroup.github.io/AdaptivePy/policies/) and
+[Configuration](https://shuklagroup.github.io/AdaptivePy/configuration/).
 
 AdaptivePy also supports opt-in metapolicy ensembles with majority polling or
 per-policy seed allocation through the `metapolicy` YAML block.
@@ -114,11 +114,11 @@ per-policy seed allocation through the `metapolicy` YAML block.
 
 | Guide | Description |
 |-------|-------------|
-| [Getting Started](https://hnadeem2.github.io/AdaptivePy/getting-started/) | First run in minutes |
-| [Configuration](https://hnadeem2.github.io/AdaptivePy/configuration/) | YAML options and defaults |
-| [Feature Inputs](https://hnadeem2.github.io/AdaptivePy/features/) | File formats and layout |
-| [Policies](https://hnadeem2.github.io/AdaptivePy/policies/) | Seed selection strategies |
-| [API Reference](https://hnadeem2.github.io/AdaptivePy/reference/api/) | Module documentation |
+| [Getting Started](https://shuklagroup.github.io/AdaptivePy/getting-started/) | First run in minutes |
+| [Configuration](https://shuklagroup.github.io/AdaptivePy/configuration/) | YAML options and defaults |
+| [Feature Inputs](https://shuklagroup.github.io/AdaptivePy/features/) | File formats and layout |
+| [Policies](https://shuklagroup.github.io/AdaptivePy/policies/) | Seed selection strategies |
+| [API Reference](https://shuklagroup.github.io/AdaptivePy/reference/api/) | Module documentation |
 
 ## Contributors
 

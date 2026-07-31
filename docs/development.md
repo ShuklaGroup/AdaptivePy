@@ -5,7 +5,7 @@ Guide for contributing to AdaptivePy and building documentation locally.
 ## Setup
 
 ```bash
-git clone https://github.com/hnadeem2/AdaptivePy.git
+git clone https://github.com/shuklagroup/AdaptivePy.git
 cd AdaptivePy
 pip install -e ".[dev,docs]"
 ```
