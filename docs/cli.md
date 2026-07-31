@@ -37,10 +37,13 @@ adaptivepy list-policies
 Example output:
 
 ```text
-least_counts
-random
 fast
+knn_as
+least_counts
 ma_reap
+maxent_vampnet
+random
+ts_dar
 ```
 
 Built-in policies:
@@ -51,6 +54,9 @@ Built-in policies:
 | `random` | Random cluster sampling |
 | `fast` | Feature-directed exploration/exploitation (Zimmerman & Bowman 2015) |
 | `ma_reap` | Multiagent REAP with agent stakes and learned CV weights (Kleiman & Shukla 2022) |
+| `knn_as` | k-nearest-neighbors adaptive sampling over cluster representatives (Rovers et al. 2025) |
+| `maxent_vampnet` | Entropy-based frame selection via VAMPNet; no clustering (Kleiman & Shukla 2023) |
+| `ts_dar` | OOD-score frame selection via TS-DAR hyperspherical embeddings (Liu et al. 2025) |
 
 See [Policies](policies.md) for configuration details.
 

@@ -9,7 +9,10 @@ description = "Adaptive sampling on MD trajectories via clustering and policy-dr
 readme = "README.md"
 requires-python = ">=3.9"
 license = { file = "LICENSE" }
-authors = [{ name = "Hassan" }]
+authors = [
+    { name = "Hassan Nadeem" },
+    { name = "Diego E. Kleiman" },
+]
 dependencies = [
     "numpy>=1.20",
     "scikit-learn>=1.0",
