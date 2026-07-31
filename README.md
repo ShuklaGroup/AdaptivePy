@@ -4,7 +4,7 @@
 
 Clustering-based and frame-level adaptive policies for MD workflows, including entropy-based MaxEnt VAMPNet and OOD-based TS-DAR seed selection.
 
-[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue?style=for-the-badge)](https://hnadeem2.github.io/AdaptivePy/)
+[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue?style=for-the-badge)](https://shuklagroup.github.io/AdaptivePy/)
 [![PyPI](https://img.shields.io/badge/PyPI-adaptivepy--sampling-orange?style=for-the-badge)](https://pypi.org/project/adaptivepy-sampling/)
 [![Python](https://img.shields.io/badge/python-3.9+-green?style=for-the-badge)](https://www.python.org/)
 
