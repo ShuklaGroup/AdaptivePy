@@ -1,7 +1,14 @@
 # Policies
 
-Policies decide **which clusters** should contribute seed frames. After a policy
-selects clusters, the seed selection module picks one frame from each cluster.
+Most policies decide **which clusters** should contribute seed frames. After a
+policy selects clusters, the seed selection module picks one frame from each
+cluster.
+
+**MaxEnt VAMPNet** (`maxent_vampnet`) and **TS-DAR** (`ts_dar`) are
+**frame-level**: they train Torch models on lagged features and select scored
+frames directly — no clustering required. Clustering is skipped when only
+frame-level policies are configured, and is forced when they participate in a
+metapolicy ensemble (frame scores are aggregated to clusters first).
 
 ## Built-in policies
 
