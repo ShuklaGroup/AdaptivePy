@@ -5,6 +5,7 @@
 Adaptive sampling for MD workflows via clustering and policy-driven seed selection.
 
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue?style=for-the-badge)](https://shuklagroup.github.io/AdaptivePy/)
+[![Preprint](https://img.shields.io/badge/preprint-bioRxiv%20-red?style=for-the-badge)](https://doi.org/10.64898/2026.08.04.742868)
 [![PyPI](https://img.shields.io/badge/PyPI-adaptivepy--sampling-orange?style=for-the-badge)](https://pypi.org/project/adaptivepy-sampling/)
 [![Python](https://img.shields.io/badge/python-3.9+-green?style=for-the-badge)](https://www.python.org/)
 
