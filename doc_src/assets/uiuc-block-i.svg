@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="University of Illinois Block I">
+  <polygon
+    points="24,12 76,12 76,34 60,34 60,66 76,66 76,88 24,88 24,66 40,66 40,34 24,34"
+    fill="#FF5F05"
+    stroke="#13294B"
+    stroke-width="4"
+    stroke-linejoin="miter"
+  />
+</svg>

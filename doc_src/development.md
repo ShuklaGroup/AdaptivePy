@@ -38,18 +38,20 @@ Build a static site (same check used in CI):
 mkdocs build --strict
 ```
 
-Output is written to `site/`.
+Output is written to `docs/` (the folder GitHub Pages serves from `main`).
 
 ## Documentation structure
 
 | Path | Purpose |
 |------|---------|
-| `docs/*.md` | User guides (edit these for workflow docs) |
-| `docs/reference/*.md` | API reference via mkdocstrings (pulls from code docstrings) |
+| `doc_src/*.md` | User guides (edit these for workflow docs) |
+| `doc_src/reference/*.md` | API reference via mkdocstrings (pulls from code docstrings) |
+| `docs/` | Built static site (generated; do not edit by hand) |
 | `mkdocs.yml` | Site theme, navigation, and plugin config |
 
 When you update docstrings in `adaptivepy/`, the API reference pages update
-automatically on the next docs build.
+automatically on the next docs build. Pushes that change `doc_src/` or
+`adaptivepy/` trigger CI to rebuild and commit the updated `docs/` folder.
 
 ## Project layout
 
@@ -89,7 +91,7 @@ Existing examples with `policy_params`:
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `.github/workflows/docs.yml` | Push to `main` (docs/code changes) | Build and deploy GitHub Pages |
+| `.github/workflows/docs.yml` | Push to `main` (`doc_src/` or code changes) | Build MkDocs site into `docs/` and push to `main` for GitHub Pages |
 | `.github/workflows/publish.yml` | GitHub Release published | Publish to PyPI |
 
 ## Release checklist

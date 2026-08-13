@@ -3,7 +3,9 @@ site_description: Adaptive sampling for molecular dynamics trajectories
 site_url: https://shuklagroup.github.io/AdaptivePy/
 repo_url: https://github.com/shuklagroup/AdaptivePy
 repo_name: shuklagroup/AdaptivePy
-edit_uri: edit/main/docs/
+edit_uri: edit/main/doc_src/
+docs_dir: doc_src
+site_dir: docs
 
 theme:
   name: material

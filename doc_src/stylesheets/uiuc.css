@@ -1,0 +1,50 @@
+/*
+ * University of Illinois Urbana-Champaign brand palette for AdaptivePy docs.
+ * Illini Blue  #13294B  (primary / header)
+ * Illini Orange #FF5F05  (accent / links, highlights)
+ */
+
+:root {
+  --uiuc-blue: #13294b;
+  --uiuc-blue-light: #1d3b6b;
+  --uiuc-blue-dark: #0d1c34;
+  --uiuc-orange: #ff5f05;
+  --uiuc-orange-dark: #d95000;
+}
+
+/* Primary (header, nav, footer) uses Illini Blue in both light and dark modes. */
+[data-md-color-primary="custom"] {
+  --md-primary-fg-color: var(--uiuc-blue);
+  --md-primary-fg-color--light: var(--uiuc-blue-light);
+  --md-primary-fg-color--dark: var(--uiuc-blue-dark);
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: rgba(255, 255, 255, 0.7);
+}
+
+/* Accent (links, hovers, focus) uses Illini Orange. */
+[data-md-color-accent="custom"] {
+  --md-accent-fg-color: var(--uiuc-orange);
+  --md-accent-fg-color--transparent: rgba(255, 95, 5, 0.1);
+}
+
+/* Keep interactive text (links, in-page anchors) on the Illini Orange accent. */
+.md-typeset a {
+  color: var(--uiuc-orange-dark);
+}
+
+.md-typeset a:hover {
+  color: var(--uiuc-orange);
+}
+
+/* Place the Illinois Block I to the right of the "AdaptivePy" site title. */
+.md-header__title .md-header__topic:first-child .md-ellipsis::after {
+  content: "";
+  display: inline-block;
+  width: 1.1em;
+  height: 1.1em;
+  margin-left: 0.4em;
+  vertical-align: -0.2em;
+  background: url("../assets/uiuc-block-i.svg") no-repeat center center;
+  background-size: contain;
+}
+
